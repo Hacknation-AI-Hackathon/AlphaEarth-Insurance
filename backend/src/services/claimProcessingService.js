@@ -2,7 +2,22 @@ import axios from 'axios';
 import { initializeEarthEngine } from './earthEngineService.js';
 
 // Python Earth Engine Service URL
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+// On Vercel, Python service is at /api/python relative to the same domain
+const getPythonServiceUrl = () => {
+  if (process.env.PYTHON_SERVICE_URL) {
+    return process.env.PYTHON_SERVICE_URL;
+  }
+  
+  // On Vercel, use relative URL to same domain
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/api/python`;
+  }
+  
+  // Local development
+  return 'http://localhost:5001';
+};
+
+const PYTHON_SERVICE_URL = getPythonServiceUrl();
 
 /**
  * Initialize Earth Engine if not already initialized

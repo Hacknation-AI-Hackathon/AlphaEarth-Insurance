@@ -1,0 +1,20 @@
+# This file tells Vercel which Python packages to install
+# It should mirror backend/python-service/requirements.txt
+flask
+flask-cors
+earthengine-api
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+numpy
+opencv-python
+scikit-image
+Pillow
+python-dotenv
+requests
+aiohttp
+pydantic
+python-dateutil
+pytz
+serverless-http
+
