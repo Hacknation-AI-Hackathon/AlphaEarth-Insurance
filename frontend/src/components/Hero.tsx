@@ -1,66 +1,179 @@
-import { Button } from "@/components/ui/button";
-import { Satellite, MapPin, Shield } from "lucide-react";
+import { Satellite } from "lucide-react";
+import spacexImage from "@/assets/images/spacex.jpg";
+import { NeedHelp } from "./NeedHelp";
 
 export const Hero = () => {
+  const handleScrollToHowItWorks = () => {
+    const howItWorksSection = document.getElementById('how-it-works');
+    if (howItWorksSection) {
+      howItWorksSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
-    <section className="relative overflow-hidden">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/5" />
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLW9wYWNpdHk9IjAuMDMiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-40" />
+    <section className="relative overflow-hidden" style={{ background: '#000000', paddingTop: '120px', height: '100vh', position: 'relative' }}>
+      {/* Background Image */}
+      <div className="absolute inset-0" style={{
+        backgroundImage: `url(${spacexImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center center',
+        backgroundRepeat: 'no-repeat',
+        zIndex: 0
+      }} />
       
-      <div className="container relative mx-auto px-4 py-24 md:py-32">
-        <div className="mx-auto max-w-4xl text-center space-y-8">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary">
-            <Satellite className="h-4 w-4" />
-            <span>Powered by AlphaEarth Intelligence</span>
+      {/* Dark Overlay for better text readability */}
+      <div className="absolute inset-0" style={{
+        background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.1) 100%)',
+        zIndex: 1
+      }} />
+      
+      <div className="container relative mx-auto px-4 py-24 md:py-32" style={{ zIndex: 10, transform: 'translateY(-45px)', position: 'relative' }}>
+        <div className="mx-auto max-w-4xl text-center space-y-8" style={{ position: 'relative', zIndex: 11 }}>
+          {/* Badge - Apple-style Glassmorphism */}
+          <div className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm" style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            color: '#ffffff',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            fontWeight: 400,
+            letterSpacing: '0.5px'
+          }}>
+            <Satellite className="h-4 w-4" style={{ color: '#ffffff' }} />
+            <span>Powered by GoogleEarth Intelligence</span>
           </div>
 
-          {/* Main Heading */}
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
-            <span className="bg-gradient-to-r from-primary via-primary to-secondary bg-clip-text text-transparent">
-              Insurance Intelligence
+          {/* Main Heading - Apple-style */}
+          <h1 className="text-5xl md:text-7xl" style={{
+            fontWeight: 600,
+            letterSpacing: '-0.02em',
+            lineHeight: '1.05'
+          }}>
+            <span style={{
+              color: '#ffffff',
+              textShadow: 'none',
+              mixBlendMode: 'normal',
+              display: 'inline-block',
+              transform: 'translateX(20px)'
+            }}>
+              Insurance{' '}
+            </span>
+            <span style={{
+              color: '#ffffff',
+              textShadow: 'none',
+              display: 'inline-block',
+              transform: 'translateX(40px)',
+              mixBlendMode: 'normal'
+            }}>
+              Intelligence
             </span>
             <br />
-            <span className="text-foreground">From Space</span>
+            <span style={{ 
+              color: '#ffffff',
+              textShadow: 'none',
+              display: 'inline-block',
+              transform: 'translateX(-45px)',
+              fontWeight: 600,
+              mixBlendMode: 'normal'
+            }}>
+              From{' '}
+            </span>
+            <span style={{ 
+              color: '#ffffff',
+              textShadow: 'none',
+              display: 'inline-block',
+              transform: 'translateX(65px)',
+              fontWeight: 600,
+              mixBlendMode: 'normal'
+            }}>
+              Space
+            </span>
           </h1>
 
-          {/* Subheading */}
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          {/* Subheading - Apple-style */}
+          <p className="text-xl md:text-2xl max-w-2xl mx-auto" style={{ 
+            color: '#ffffff',
+            textShadow: 'none',
+            marginTop: '150px',
+            fontWeight: 400,
+            letterSpacing: '0.011em',
+            lineHeight: '1.47059',
+            mixBlendMode: 'normal',
+            opacity: 0.9
+          }}>
             Predict risk before disasters strike. Assess damage in real-time. 
             Automate claims with satellite imagery and AI.
           </p>
 
-          {/* CTA Button */}
-          <div className="flex justify-center items-center pt-4">
-            <Button size="lg" className="text-lg px-8 shadow-lg hover:shadow-xl transition-all" asChild>
-              <a href="/demo">
-                <Shield className="mr-2 h-5 w-5" />
-                View Demo
-              </a>
-            </Button>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-8 pt-12 max-w-2xl mx-auto">
-            <div className="space-y-2">
-              <div className="text-3xl md:text-4xl font-bold text-primary">99.2%</div>
-              <div className="text-sm text-muted-foreground">Accuracy Rate</div>
-            </div>
-            <div className="space-y-2">
-              <div className="text-3xl md:text-4xl font-bold text-secondary">24/7</div>
-              <div className="text-sm text-muted-foreground">Real-Time Monitoring</div>
-            </div>
-            <div className="space-y-2">
-              <div className="text-3xl md:text-4xl font-bold text-primary">5min</div>
-              <div className="text-sm text-muted-foreground">Claim Processing</div>
-            </div>
+          {/* CTA Buttons - Apple-style */}
+          <div className="flex justify-center items-center gap-4 pt-8">
+            {/* Learn More Button - Solid Blue */}
+            <a 
+              href="/demo"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '12px 22px',
+                borderRadius: '22px',
+                background: '#0071e3',
+                color: '#ffffff',
+                fontSize: '17px',
+                fontWeight: 400,
+                textDecoration: 'none',
+                transition: 'background-color 0.2s ease',
+                cursor: 'pointer',
+                border: 'none',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#0077ed'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#0071e3'}
+            >
+              View Demo
+            </a>
+            
+            {/* View Demo Button - Transparent with Blue Border */}
+            <a 
+              href="#how-it-works"
+              onClick={(e) => {
+                e.preventDefault();
+                handleScrollToHowItWorks();
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '12px 22px',
+                borderRadius: '22px',
+                background: 'transparent',
+                color: '#0071e3',
+                fontSize: '17px',
+                fontWeight: 400,
+                textDecoration: 'none',
+                transition: 'background-color 0.2s ease',
+                cursor: 'pointer',
+                border: '1px solid #0071e3',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 113, 227, 0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              Learn more
+            </a>
           </div>
         </div>
       </div>
-
+      
       {/* Bottom Fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-background to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-24" style={{
+        background: 'linear-gradient(to top, #000000, transparent)',
+        zIndex: 5
+      }} />
+      
     </section>
   );
 };

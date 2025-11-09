@@ -1,4 +1,3 @@
-import { Card } from "@/components/ui/card";
 import { Satellite, Zap, Shield, BarChart3, Globe, Clock } from "lucide-react";
 
 const features = [
@@ -36,11 +35,11 @@ const features = [
 
 export const Features = () => {
   return (
-    <section className="py-20 bg-background">
+    <section className="py-20" style={{ background: '#000000' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold mb-4">Powered by AlphaEarth AI</h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          <h2 className="text-4xl font-bold mb-4" style={{ color: '#ffffff' }}>Powered by AlphaEarth AI</h2>
+          <p className="text-xl max-w-2xl mx-auto" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
             Next-generation insurance technology combining satellite imagery, 
             machine learning, and real-time climate data
           </p>
@@ -50,20 +49,28 @@ export const Features = () => {
           {features.map((feature) => {
             const Icon = feature.icon;
             return (
-              <Card 
+              <div 
                 key={feature.title} 
-                className="p-6 hover:shadow-lg transition-all hover:scale-105 duration-300 border-border/50"
+                className="p-6 hover:shadow-lg transition-all hover:scale-105 duration-300"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(21px)'
+                }}
               >
                 <div className="space-y-4">
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Icon className="h-6 w-6 text-primary" />
+                  <div className="h-12 w-12 rounded-lg flex items-center justify-center" style={{
+                    background: 'rgba(0, 117, 255, 0.1)'
+                  }}>
+                    <Icon className="h-6 w-6" style={{ color: '#0075FF' }} />
                   </div>
-                  <h3 className="text-xl font-semibold">{feature.title}</h3>
-                  <p className="text-muted-foreground leading-relaxed">
+                  <h3 className="text-xl font-semibold" style={{ color: '#ffffff' }}>{feature.title}</h3>
+                  <p className="leading-relaxed" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
                     {feature.description}
                   </p>
                 </div>
-              </Card>
+              </div>
             );
           })}
         </div>

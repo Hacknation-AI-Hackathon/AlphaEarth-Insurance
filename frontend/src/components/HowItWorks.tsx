@@ -1,5 +1,3 @@
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { MapPin, Scan, Brain, CheckCircle } from "lucide-react";
 
 const steps = [
@@ -35,12 +33,17 @@ const steps = [
 
 export const HowItWorks = () => {
   return (
-    <section className="py-20 bg-muted/30">
+    <section className="py-20" style={{ background: '#000000' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <Badge className="mb-4">Simple Process</Badge>
-          <h2 className="text-4xl font-bold mb-4">How It Works</h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          <div className="mb-4 inline-block px-4 py-2 rounded-full" style={{
+            background: 'rgba(0, 117, 255, 0.1)',
+            color: '#0075FF',
+            fontSize: '14px',
+            fontWeight: 500
+          }}>Simple Process</div>
+          <h2 className="text-4xl font-bold mb-4" style={{ color: '#ffffff' }}>How It Works</h2>
+          <p className="text-xl max-w-2xl mx-auto" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
             From satellite to insurance decision in minutes
           </p>
         </div>
@@ -52,54 +55,81 @@ export const HowItWorks = () => {
               <div key={step.number} className="relative">
                 {/* Connector Line */}
                 {index < steps.length - 1 && (
-                  <div className="hidden lg:block absolute top-20 left-[60%] w-full h-0.5 bg-gradient-to-r from-primary/50 to-transparent" />
+                  <div className="hidden lg:block absolute top-20 left-[60%] w-full h-0.5" style={{
+                    background: 'linear-gradient(to right, rgba(0, 117, 255, 0.5), transparent)'
+                  }} />
                 )}
                 
-                <Card className="p-6 text-center hover:shadow-lg transition-all duration-300 relative">
+                <div className="p-6 text-center hover:shadow-lg transition-all duration-300 relative" style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(21px)'
+                }}>
                   <div className="space-y-4">
                     {/* Number Badge */}
-                    <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary mx-auto">
+                    <div className="inline-flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold mx-auto" style={{
+                      background: 'rgba(0, 117, 255, 0.1)',
+                      color: '#0075FF'
+                    }}>
                       {step.number}
                     </div>
                     
                     {/* Icon */}
                     <div className="flex justify-center">
-                      <div className={`h-12 w-12 rounded-lg bg-background flex items-center justify-center border-2 ${step.color === "text-primary" ? "border-primary" : "border-secondary"}`}>
-                        <Icon className={`h-6 w-6 ${step.color}`} />
+                      <div className="h-12 w-12 rounded-lg flex items-center justify-center border-2" style={{
+                        background: '#000000',
+                        borderColor: step.color === "text-primary" ? '#0075FF' : '#00D4FF'
+                      }}>
+                        <Icon className="h-6 w-6" style={{ color: step.color === "text-primary" ? '#0075FF' : '#00D4FF' }} />
                       </div>
                     </div>
                     
-                    <h3 className="text-xl font-semibold">{step.title}</h3>
-                    <p className="text-muted-foreground leading-relaxed">
+                    <h3 className="text-xl font-semibold" style={{ color: '#ffffff' }}>{step.title}</h3>
+                    <p className="leading-relaxed" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
                       {step.description}
                     </p>
                   </div>
-                </Card>
+                </div>
               </div>
             );
           })}
         </div>
 
         <div className="mt-16 text-center">
-          <Card className="p-8 max-w-4xl mx-auto bg-gradient-to-br from-primary/5 via-background to-secondary/5 border-primary/20">
+          <div className="p-8 max-w-4xl mx-auto" style={{
+            background: 'rgba(255, 255, 255, 0.05)',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(21px)'
+          }}>
             <div className="space-y-4">
-              <h3 className="text-2xl font-bold">Ready to Transform Insurance?</h3>
-              <p className="text-lg text-muted-foreground">
+              <h3 className="text-2xl font-bold" style={{ color: '#ffffff' }}>Ready to Transform Insurance?</h3>
+              <p className="text-lg" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
                 Join the future of climate-aware risk assessment and automated claims processing
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                <Badge variant="secondary" className="text-base py-2 px-4">
+                <div className="text-base py-2 px-4 rounded-full inline-block" style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: 'rgba(255, 255, 255, 0.9)'
+                }}>
                   ✓ 99.2% Accuracy
-                </Badge>
-                <Badge variant="secondary" className="text-base py-2 px-4">
+                </div>
+                <div className="text-base py-2 px-4 rounded-full inline-block" style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: 'rgba(255, 255, 255, 0.9)'
+                }}>
                   ✓ Real-Time Data
-                </Badge>
-                <Badge variant="secondary" className="text-base py-2 px-4">
+                </div>
+                <div className="text-base py-2 px-4 rounded-full inline-block" style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: 'rgba(255, 255, 255, 0.9)'
+                }}>
                   ✓ Global Coverage
-                </Badge>
+                </div>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     </section>
