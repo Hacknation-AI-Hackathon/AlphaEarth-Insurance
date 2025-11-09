@@ -1,5 +1,6 @@
 import ee
 from src.feature_extraction import _mndwi, _nbr, _ndwi, delta, auto_threshold
+from src.alphaearth import alphaearth_change_score
 
 # Rule Based detection of hazards no specialized models for now 
 def detect_flood(pre_img, post_img, aoi=None, scale=30, return_mask: bool = False):
@@ -101,11 +102,3 @@ def detect_roof_damage(pre_img, post_img, aoi=None, scale=10, return_mask: bool 
         "severity": severity.getInfo()
     }
     return (result, mask) if return_mask else result
-
-
-# Once the Rule based detection is working as expected then if time permits specialized algorithms for each use case
-# def detect_flood_advanced
-
-# def detect_wildfire_advanced
-
-# def detect_roof_damage_advanced
