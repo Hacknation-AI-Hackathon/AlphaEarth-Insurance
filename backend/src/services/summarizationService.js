@@ -25,21 +25,18 @@ were fused, what the resulting risk level means, and why this decision was made.
 }
 
 /**
- * Summarize claim decision using AI
- * Tries multiple AI providers in order:
- * 1. Anthropic Claude (if API key configured)
- * 2. Inception Labs Mercury (if API key configured)
- * 3. Fallback to basic template summary
+ * Summarize claim decision using Anthropic Claude AI
+ * Falls back to template summary if API is unavailable
  * 
  * @param {Object} claimOutput - Claim decision output
  * @returns {Promise<string>} - Summary text
  */
 export async function summarizeClaimDecision(claimOutput) {
-  // Try Anthropic Claude first (already configured in Node.js backend)
+  // Use Anthropic Claude for AI summary generation
   if (process.env.ANTHROPIC_API_KEY && 
       process.env.ANTHROPIC_API_KEY !== 'your_anthropic_api_key_here') {
     try {
-      console.log('🧠 [SUMMARIZATION] Attempting to use Anthropic Claude...');
+      console.log('🧠 [SUMMARIZATION] Generating AI summary with Anthropic Claude...');
       
       const client = new Anthropic({
         apiKey: process.env.ANTHROPIC_API_KEY
@@ -60,61 +57,15 @@ export async function summarizeClaimDecision(claimOutput) {
 
       const summary = response.content[0].text.trim();
       console.log('   ✅ Anthropic Claude summarization successful');
+      console.log('   📝 Summary:', summary);
       return summary;
     } catch (error) {
       console.error('   ❌ Anthropic summarization failed:', error.message);
-      // Fall through to next method
-    }
-  }
-
-  // Try Inception Labs Mercury via fetch (no additional dependencies needed)
-  if (process.env.INCEPTION_API_KEY && 
-      process.env.INCEPTION_API_KEY !== 'your_inception_api_key_here') {
-    try {
-      console.log('🧠 [SUMMARIZATION] Attempting to use Inception Labs Mercury...');
-      
-      const prompt = buildPrompt(claimOutput);
-      const response = await fetch('https://api.inceptionlabs.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.INCEPTION_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: 'mercury',
-          messages: [
-            {
-              role: 'system',
-              content: 'You generate concise insurance summaries.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: 400,
-          temperature: 0.3
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Inception Labs API error ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-      const summary = data?.choices?.[0]?.message?.content?.trim();
-      
-      if (summary) {
-        console.log('   ✅ Inception Labs Mercury summarization successful');
-        return summary;
-      }
-      
-      console.error('   ⚠️  Inception Labs summarization returned no content:', data);
-    } catch (error) {
-      console.error('   ❌ Inception Labs summarization failed:', error.message);
+      console.error('   Error details:', error);
       // Fall through to fallback
     }
+  } else {
+    console.log('   ⚠️  Anthropic API key not configured');
   }
 
   // Fallback: Generate a basic summary

@@ -52,8 +52,9 @@ export function useEvaluatePolicy() {
   return useMutation({
     mutationFn: (policyId: string) => apiClient.evaluatePolicy(policyId),
     onSuccess: () => {
-      // Invalidate payouts cache to show new payouts
+      // Invalidate payouts cache to show new payouts and statistics
       queryClient.invalidateQueries({ queryKey: ["parametric", "payouts"] });
+      queryClient.invalidateQueries({ queryKey: ["parametric", "statistics"] });
     },
   });
 }
@@ -102,8 +103,9 @@ export function useApproveParametricPayout() {
       adminPassword: string 
     }) => apiClient.approveParametricPayout(payoutId, adminEmail, adminPassword),
     onSuccess: () => {
-      // Invalidate payouts cache
+      // Invalidate payouts cache and statistics
       queryClient.invalidateQueries({ queryKey: ["parametric", "payouts"] });
+      queryClient.invalidateQueries({ queryKey: ["parametric", "statistics"] });
     },
   });
 }
@@ -125,8 +127,9 @@ export function useRejectParametricPayout() {
       reason: string;
     }) => apiClient.rejectParametricPayout(payoutId, adminEmail, adminPassword, reason),
     onSuccess: () => {
-      // Invalidate payouts cache
+      // Invalidate payouts cache and statistics
       queryClient.invalidateQueries({ queryKey: ["parametric", "payouts"] });
+      queryClient.invalidateQueries({ queryKey: ["parametric", "statistics"] });
     },
   });
 }
@@ -137,6 +140,7 @@ export function useParametricStatistics() {
     queryKey: ["parametric", "statistics"],
     queryFn: () => apiClient.getParametricStatistics(),
     staleTime: 30000,
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
 }
 

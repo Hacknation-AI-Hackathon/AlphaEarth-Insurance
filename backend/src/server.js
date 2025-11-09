@@ -11,6 +11,7 @@ import parametricRoutes from './routes/parametricRoutes.js';
 import flightRoutes from './routes/flightRoutes.js';
 import claimProcessingRoutes from './routes/claimProcessingRoutes.js';
 import demoRoutes from './routes/demoRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -58,6 +59,7 @@ app.use('/api/parametric', parametricRoutes);
 app.use('/api/flight', flightRoutes);
 app.use('/api/claim_processing', claimProcessingRoutes);
 app.use('/api/demo', demoRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

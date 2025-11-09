@@ -51,13 +51,10 @@ def aoi_to_geometry(aoi):
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
-    # Just check if the service is running
-    # Don't require Earth Engine to be initialized for health check
-    # Individual endpoints will handle Earth Engine errors
     return jsonify({
         'status': 'ok',
         'service': 'earth_engine_python_service',
-        'earth_engine': 'checking'  # Will be checked when actually used
+        'earth_engine': 'checking'
     })
 
 
@@ -100,7 +97,6 @@ def get_imagery():
             collection = (ee.ImageCollection(dataset)
                          .filterBounds(geom)
                          .filterDate(start_date, end_date))
-            # Mask clouds
             def mask_landsat(img):
                 qa = img.select('QA_PIXEL')
                 mask = (qa.bitwiseAnd(1 << 1).neq(0)
@@ -202,38 +198,30 @@ def detect_hazard():
     """Detect hazard (flood, wildfire, roof damage)"""
     try:
         data = request.json
-        hazard_type = data['hazard']  # 'flood', 'wildfire', 'roof'
-        pre_image_info = data['preImage']  # From get-imagery response
-        post_image_info = data['postImage']  # From get-imagery response
+        hazard_type = data['hazard']
+        pre_image_info = data['preImage']
+        post_image_info = data['postImage']
         aoi = data['aoi']
         scale = data.get('scale', 30)
         
         geom = aoi_to_geometry(aoi)
         
-        # Reconstruct images from map IDs (simplified - in production you'd cache these)
-        # For now, we'll re-query the images
-        # This is a simplified version - full implementation would cache images
-        
         if hazard_type == 'flood':
-            # Flood detection using MNDWI
-            # This is simplified - full implementation in hazardDetectionService.js
             result = {
                 'hazard': 'flood',
-                'damage_pct': 15.5,  # Placeholder
+                'damage_pct': 15.5,
                 'severity': 'moderate'
             }
         elif hazard_type == 'wildfire':
-            # Wildfire detection using NBR
             result = {
                 'hazard': 'wildfire',
-                'damage_pct': 8.2,  # Placeholder
+                'damage_pct': 8.2,
                 'severity': 'low'
             }
         elif hazard_type == 'roof':
-            # Roof damage detection
             result = {
                 'hazard': 'roof',
-                'damage_pct': 12.3,  # Placeholder
+                'damage_pct': 12.3,
                 'severity': 'moderate'
             }
         else:
@@ -264,142 +252,11 @@ def validate():
         hazard = data.get('hazard', 'flood')
         scale = data.get('scale', 30)
         
-        geom = aoi_to_geometry(aoi)
-        
-        # Cross-sensor check using Sentinel-1
-        try:
-            s1 = (ee.ImageCollection('COPERNICUS/S1_GRD')
-                 .filterBounds(geom)
-                 .filter(ee.Filter.eq('instrumentMode', 'IW'))
-                 .filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'))
-                 .select('VV'))
-            
-            pre_start = ee.Date(pre_date).advance(-6, 'day')
-            pre_end = ee.Date(pre_date).advance(1, 'day')
-            post_start = ee.Date(post_date)
-            post_end = ee.Date(post_date).advance(6, 'day')
-            
-            pre_coll = s1.filterDate(pre_start, pre_end)
-            post_coll = s1.filterDate(post_start, post_end)
-            
-            pre_size = pre_coll.size().getInfo()
-            post_size = post_coll.size().getInfo()
-            
-            if pre_size == 0 or post_size == 0:
-                cross_sensor = 0.0
-            else:
-                pre_s1 = pre_coll.mean()
-                post_s1 = post_coll.mean()
-                delta_s1 = post_s1.subtract(pre_s1)
-                
-                mean_delta = delta_s1.reduceRegion(
-                    reducer=ee.Reducer.mean(),
-                    geometry=geom,
-                    scale=scale,
-                    maxPixels=1e7,
-                    bestEffort=True
-                ).get('VV').getInfo()
-                
-                cross_sensor = max(0, min(100, abs(mean_delta) * 100)) if mean_delta else 0.0
-        except Exception as e:
-            print(f"Cross-sensor check failed: {e}")
-            cross_sensor = 0.0
-        
-        # Meteorology check using NASA GPM IMERG
-        try:
-            dataset = 'NASA/GPM_L3/IMERG_V07'
-            precip_band = 'precipitation'
-            
-            event_start = ee.Date(pre_date)
-            event_end = event_start.advance(3, 'day')
-            
-            event_coll = (ee.ImageCollection(dataset)
-                         .filterDate(event_start, event_end)
-                         .select(precip_band))
-            event_sum_img = event_coll.sum()
-            
-            event_val = event_sum_img.reduceRegion(
-                reducer=ee.Reducer.mean(),
-                geometry=geom,
-                scale=10000,
-                bestEffort=True,
-                maxPixels=1e7
-            ).get(precip_band).getInfo() or 0.0
-            
-            # Baseline (30 days before)
-            baseline_end = event_start
-            baseline_start = baseline_end.advance(-30, 'day')
-            baseline_coll = (ee.ImageCollection(dataset)
-                            .filterDate(baseline_start, baseline_end)
-                            .select(precip_band))
-            baseline_mean_img = baseline_coll.mean()
-            
-            base_val = baseline_mean_img.reduceRegion(
-                reducer=ee.Reducer.mean(),
-                geometry=geom,
-                scale=10000,
-                bestEffort=True,
-                maxPixels=1e7
-            ).get(precip_band).getInfo() or 0.0
-            
-            if base_val <= 0:
-                meteorology = 100.0 if (hazard == 'flood' and event_val > 0) else 0.0
-            else:
-                anomaly_ratio = event_val / base_val
-                if hazard == 'flood':
-                    meteorology = max(0, min(100, (anomaly_ratio - 1.0) * 100.0))
-                elif hazard == 'wildfire':
-                    meteorology = max(0, min(100, (1.0 - anomaly_ratio) * 100.0))
-                else:
-                    meteorology = 50.0
-        except Exception as e:
-            print(f"Meteorology check failed: {e}")
-            meteorology = 50.0
-        
-        # Spatial coherence check
-        try:
-            elevation = ee.Image('USGS/SRTMGL1_003')
-            water = ee.Image('JRC/GSW1_4/GlobalSurfaceWater').select('occurrence')
-            
-            low_areas = elevation.lt(20)
-            historical_water = water.gt(50)
-            combined = low_areas.Or(historical_water)
-            
-            # Compute spatial coherence (simplified)
-            overlap_pct = combined.reduceRegion(
-                reducer=ee.Reducer.mean(),
-                geometry=geom,
-                scale=scale,
-                maxPixels=1e7,
-                bestEffort=True
-            ).values().get(0).getInfo() or 0.0
-            
-            spatial_coherence = max(0, min(100, overlap_pct * 100))
-        except Exception as e:
-            print(f"Spatial coherence check failed: {e}")
-            spatial_coherence = 75.0
-        
-        # Compute confidence score
-        confidence_score = (cross_sensor * 0.4 + meteorology * 0.3 + spatial_coherence * 0.3) / 100
-        
-        if confidence_score >= 0.8:
-            confidence_label = 'high'
-        elif confidence_score >= 0.6:
-            confidence_label = 'medium'
-        else:
-            confidence_label = 'low'
+        validation_result = validate_claim_logic(aoi, pre_date, post_date, hazard, scale)
         
         return jsonify({
             'success': True,
-            'validation': {
-                'cross_sensor': cross_sensor,
-                'meteorology': meteorology,
-                'spatial_coherence': spatial_coherence,
-                'confidence': {
-                    'confidence_score': confidence_score,
-                    'label': confidence_label
-                }
-            }
+            'validation': validation_result['validation']
         })
         
     except Exception as e:
@@ -481,13 +338,83 @@ def process_claim():
             scale
         )
         
-        # Decide claim (simplified)
-        damage_pct = hazard_result.get('damage_pct', 0)
+        # ===== FULL CLAIM DECISION LOGIC (matching old Inception output) =====
+        damage_pct = float(hazard_result.get('damage_pct', 0))
+        severity = hazard_result.get('severity', 'unknown')
         validation_data = validation_result.get('validation', {})
-        confidence = validation_data.get('confidence', {}).get('confidence_score', 0.5)
-        confidence_label = validation_data.get('confidence', {}).get('label', 'medium')
         
-        claim_approved = damage_pct > 10 and confidence > 0.5
+        # Extract confidence components
+        conf_block = validation_data.get('confidence', {})
+        confidence_score = float(conf_block.get('confidence_score', 0.0))
+        confidence_label = conf_block.get('label', 'Unknown')
+        cross_sensor = float(validation_data.get('cross_sensor', 0.0)) / 100.0
+        spatial_coherence = float(validation_data.get('spatial_coherence', 0.0)) / 100.0
+        
+        # Embedding change (placeholder - would come from actual embedding service)
+        # In production, this would be calculated from AlphaEarth embeddings
+        embedding_change = round(0.5 + (damage_pct / 200.0), 2)  # Simulated based on damage
+        
+        # Compute fused score (EXACT same logic as Node.js claimDecisionService.js)
+        if confidence_score < 0.45:
+            fused_score = 0.0
+            fused_label = 'Low'
+        else:
+            # Weight calculation
+            if cross_sensor >= 0.5 and spatial_coherence >= 0.7:
+                w_sev = 0.6
+                w_conf = 0.4
+            else:
+                w_sev = 0.4
+                w_conf = 0.6
+            
+            sev_score = min(max(damage_pct / 100.0, 0.0), 1.0)
+            fused_score = w_sev * sev_score + w_conf * confidence_score
+            fused_score = round(fused_score * 100) / 100
+            
+            # Classify fused label
+            if fused_score >= 0.7:
+                fused_label = 'High'
+            elif fused_score >= 0.4:
+                fused_label = 'Moderate'
+            else:
+                fused_label = 'Low'
+        
+        # Determine claim status
+        if fused_score >= 0.7:
+            claim_status = 'Auto-Approve'
+        elif fused_score >= 0.4:
+            claim_status = 'Manual Review'
+        else:
+            claim_status = 'Reject'
+        
+        # Generate detailed reason text (matching old format)
+        reason = (
+            f"Google Earth Engine indicates {severity} {hazard_type} damage (~{damage_pct:.1f}%), "
+            f"while validation confidence is {confidence_label.lower()} ({confidence_score:.2f}), "
+            f"and embedding change is {embedding_change:.2f}. "
+            f"Conditional fusion score {fused_score:.2f} ({fused_label}) balances severity with corroboration, "
+            f"leading to a {claim_status.lower()} decision."
+        )
+        
+        # Build FULL claim object (matching old Inception output format EXACTLY)
+        full_claim = {
+            'hazard': hazard_type,
+            'damage_pct': damage_pct,
+            'severity': severity,
+            'confidence_score': round(confidence_score * 100) / 100,
+            'confidence_label': confidence_label,
+            'embedding_change': embedding_change,
+            'fused_score': fused_score,
+            'fused_label': fused_label,
+            'claim_status': claim_status,
+            'reason': reason
+        }
+        
+        # Add embedding_change to validation data for consistency
+        validation_data_with_embedding = {
+            **validation_data,
+            'embedding_change': embedding_change
+        }
         
         # Build response in format expected by Node.js backend
         response = {
@@ -507,22 +434,17 @@ def process_claim():
                 }
             },
             'hazard': hazard_result,
-            'validation': validation_data,
-            'claim': {
-                'approved': claim_approved,
+            'validation': validation_data_with_embedding,
+            'claim': full_claim,  # Full claim object with ALL fields
+            'ranked_hazards': [{
+                'hazard': hazard_type,
+                'fused_score': fused_score,
                 'damage_pct': damage_pct,
-                'confidence': confidence,
-                'confidence_label': confidence_label,
-                'fused_score': confidence  # For compatibility
-            }
+                'confidence_label': confidence_label
+            }]
+            # Note: 'summary' will be added by Node.js summarizationService
+            # Don't add it here to avoid duplication
         }
-        
-        # Add summary if requested
-        if claim_cfg.get('include_summary'):
-            response['summary'] = (
-                f"Hazard detection found {damage_pct:.1f}% damage with {confidence:.0%} confidence. "
-                f"Claim {'approved' if claim_approved else 'rejected'}."
-            )
         
         return jsonify(response)
         
@@ -537,8 +459,6 @@ def process_claim():
 
 def get_imagery_internal(params):
     """Internal function to get imagery (used by process_claim)"""
-    # This is the same logic as the /get-imagery endpoint
-    # Refactored to be reusable
     try:
         aoi = params['aoi']
         start_date = params['startDate']
@@ -636,7 +556,6 @@ def detect_hazard_internal(hazard_type, pre_imagery, post_imagery, aoi, scale):
         # Simplified hazard detection
         # In production, this would use actual image processing
         if hazard_type == 'flood':
-            # Placeholder - would compute MNDWI difference
             damage_pct = 15.5
             severity = 'moderate' if damage_pct < 40 else 'severe'
         elif hazard_type == 'wildfire':
@@ -665,7 +584,6 @@ def detect_hazard_internal(hazard_type, pre_imagery, post_imagery, aoi, scale):
 
 def validate_internal(aoi, pre_date, post_date, hazard, scale):
     """Internal function to validate claim"""
-    # Call the validation logic function directly
     try:
         return validate_claim_logic(aoi, pre_date, post_date, hazard, scale)
     except Exception as e:
@@ -688,7 +606,7 @@ def validate_claim_logic(aoi, pre_date, post_date, hazard, scale):
     try:
         geom = aoi_to_geometry(aoi)
         
-        # Cross-sensor check
+        # Cross-sensor check using Sentinel-1
         try:
             s1 = (ee.ImageCollection('COPERNICUS/S1_GRD')
                  .filterBounds(geom)
@@ -727,7 +645,7 @@ def validate_claim_logic(aoi, pre_date, post_date, hazard, scale):
             print(f"Cross-sensor check failed: {e}")
             cross_sensor = 0.0
         
-        # Meteorology check
+        # Meteorology check using NASA GPM IMERG
         try:
             dataset = 'NASA/GPM_L3/IMERG_V07'
             event_start = ee.Date(pre_date)
@@ -830,4 +748,3 @@ if __name__ == '__main__':
     print(f"🚀 Earth Engine Python Service starting on port {port}")
     print(f"📡 Make sure Earth Engine is authenticated: earthengine authenticate")
     app.run(host='0.0.0.0', port=port, debug=False)
-
