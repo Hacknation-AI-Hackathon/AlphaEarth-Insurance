@@ -1,8 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Satellite } from "lucide-react";
 import { NavLink } from "./NavLink";
+import { useNavigate } from "react-router-dom";
 
 export const Navigation = () => {
+  const navigate = useNavigate();
+
   return (
     <nav className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
       <div className="container mx-auto px-4">
@@ -22,12 +25,12 @@ export const Navigation = () => {
             >
               Home
             </NavLink>
-            <NavLink 
-              to="/#features" 
+            <a 
+              href="#features" 
               className="text-foreground hover:text-primary transition-colors"
             >
               Features
-            </NavLink>
+            </a>
             <NavLink 
               to="/demo" 
               className="text-foreground hover:text-primary transition-colors"
@@ -35,7 +38,19 @@ export const Navigation = () => {
             >
               Demo
             </NavLink>
-            <Button variant="outline">Login</Button>
+            <NavLink 
+              to="/signin" 
+              className="text-foreground hover:text-primary transition-colors"
+              activeClassName="text-primary font-medium"
+            >
+              Sign In
+            </NavLink>
+            <Button 
+              variant="default"
+              onClick={() => navigate('/signup')}
+            >
+              Sign Up
+            </Button>
           </div>
 
           {/* Mobile Menu Button */}

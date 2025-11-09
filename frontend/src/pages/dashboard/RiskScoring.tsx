@@ -1,9 +1,6 @@
 import { useState, useEffect } from "react";
 import { Search, Droplets, Flame, Wind, AlertCircle, Download, Mail, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { RiskMap } from "@/components/RiskMap";
 import { useToast } from "@/hooks/use-toast";
@@ -119,40 +116,110 @@ export default function RiskScoring() {
   }, []);
 
   const getRiskColor = (score: number) => {
-    if (score < 40) return "bg-green-500";
-    if (score < 70) return "bg-yellow-500";
-    return "bg-red-500";
+    if (score < 40) return "#22C55E";
+    if (score < 70) return "#F59E0B";
+    return "#EF4444";
   };
 
   const getRiskBadge = (score: number) => {
-    if (score < 40) return { text: "🟢 Low Risk", variant: "default" as const };
-    if (score < 70) return { text: "🟡 Medium Risk", variant: "secondary" as const };
-    return { text: "🔴 High Risk", variant: "destructive" as const };
+    if (score < 40) return { text: "🟢 Low Risk", color: "#22C55E" };
+    if (score < 70) return { text: "🟡 Medium Risk", color: "#F59E0B" };
+    return { text: "🔴 High Risk", color: "#EF4444" };
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ background: 'transparent', minHeight: '100vh' }}>
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Real-Time Risk Assessment</h1>
-        <p className="text-muted-foreground">
+      <div style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}>
+        <h1 
+          className="text-3xl font-bold mb-2"
+          style={{ 
+            color: 'white',
+            fontFamily: 'Plus Jakarta Display, sans-serif',
+            fontWeight: '700'
+          }}
+        >
+          Real-Time Risk Assessment
+        </h1>
+        <p 
+          className="text-sm"
+          style={{ 
+            color: '#A0AEC0',
+            fontSize: '14px',
+            fontFamily: 'Plus Jakarta Display, sans-serif'
+          }}
+        >
           Enter any address or coordinates to get instant climate risk analysis powered by satellite data
         </p>
       </div>
 
       {/* Search Section */}
-      <Card>
-        <CardContent className="p-6">
+      <div 
+        className="relative"
+        style={{ 
+          borderRadius: '20px',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Background Layer 1 - Backdrop blur */}
+        <div 
+          style={{
+            width: '100%',
+            height: '100%',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+            borderRadius: '20px',
+            backdropFilter: 'blur(60px)',
+            zIndex: 1
+          }}
+        />
+        
+        {/* Background Layer 2 - Gradient overlay */}
+        <div 
+          style={{
+            width: '100%',
+            height: '100%',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+            borderRadius: '20px',
+            zIndex: 2
+          }}
+        />
+        
+        {/* Content */}
+        <div 
+          className="relative z-10 p-6"
+          style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
+        >
           <div className="space-y-4">
             <div className="flex gap-2">
-              <Input
+              <input
+                type="text"
                 placeholder="Enter address or coordinates..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="flex-1"
+                className="flex-1 px-4 py-2 rounded-lg"
+                style={{
+                  background: 'rgba(26, 31, 55, 0.4)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  outline: 'none'
+                }}
               />
-              <Button onClick={handleSearch} disabled={isLoading}>
+              <Button 
+                onClick={handleSearch} 
+                disabled={isLoading}
+                style={{
+                  background: '#0075FF',
+                  color: 'white',
+                  border: 'none'
+                }}
+              >
                 <Search className="h-4 w-4 mr-2" />
                 Search
               </Button>
@@ -167,6 +234,11 @@ export default function RiskScoring() {
                   size="sm"
                   onClick={() => handleCitySelect(city)}
                   disabled={isLoading}
+                  style={{
+                    background: 'rgba(26, 31, 55, 0.4)',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    color: 'white'
+                  }}
                 >
                   <MapPin className="h-3 w-3 mr-1" />
                   {city}
@@ -174,161 +246,482 @@ export default function RiskScoring() {
               ))}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Results Area */}
       {isLoading ? (
         <div className="flex items-center justify-center h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div 
+            className="animate-spin rounded-full h-12 w-12 border-b-2"
+            style={{ borderColor: '#0075FF' }}
+          />
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           {/* LEFT PANEL - Risk Scores */}
           <div className="lg:col-span-2 space-y-4">
             {/* Location Header */}
-            <Card>
-              <CardContent className="p-6">
+            <div 
+              className="relative"
+              style={{ 
+                borderRadius: '20px',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Background Layer 1 - Backdrop blur */}
+              <div 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+                  borderRadius: '20px',
+                  backdropFilter: 'blur(60px)',
+                  zIndex: 1
+                }}
+              />
+              
+              {/* Background Layer 2 - Gradient overlay */}
+              <div 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+                  borderRadius: '20px',
+                  zIndex: 2
+                }}
+              />
+              
+              {/* Content */}
+              <div 
+                className="relative z-10 p-6"
+                style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
+              >
                 <div className="space-y-3">
-                  <h2 className="text-2xl font-bold">{selectedCity.name}</h2>
-                  <Badge {...getRiskBadge(selectedCity.overall)}>
-                    {getRiskBadge(selectedCity.overall).text}
-                  </Badge>
+                  <h2 
+                    className="text-2xl font-bold"
+                    style={{ color: 'white' }}
+                  >
+                    {selectedCity.name}
+                  </h2>
+                  <div 
+                    className="inline-block px-3 py-1 rounded-lg"
+                    style={{ 
+                      background: `rgba(${getRiskBadge(selectedCity.overall).color === '#22C55E' ? '34, 197, 94' : getRiskBadge(selectedCity.overall).color === '#F59E0B' ? '245, 158, 11' : '239, 68, 68'}, 0.2)`,
+                      border: `1px solid ${getRiskBadge(selectedCity.overall).color}40`
+                    }}
+                  >
+                    <span 
+                      className="font-medium"
+                      style={{ color: getRiskBadge(selectedCity.overall).color }}
+                    >
+                      {getRiskBadge(selectedCity.overall).text}
+                    </span>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Overall Risk Score */}
-            <Card>
-              <CardContent className="p-6 space-y-3">
-                <p className="text-sm text-muted-foreground">Overall Risk Score</p>
+            <div 
+              className="relative"
+              style={{ 
+                borderRadius: '20px',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Background Layer 1 - Backdrop blur */}
+              <div 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+                  borderRadius: '20px',
+                  backdropFilter: 'blur(60px)',
+                  zIndex: 1
+                }}
+              />
+              
+              {/* Background Layer 2 - Gradient overlay */}
+              <div 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+                  borderRadius: '20px',
+                  zIndex: 2
+                }}
+              />
+              
+              {/* Content */}
+              <div 
+                className="relative z-10 p-6 space-y-3"
+                style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
+              >
+                <p 
+                  className="text-sm"
+                  style={{ color: '#A0AEC0' }}
+                >
+                  Overall Risk Score
+                </p>
                 <div className="flex items-end gap-2">
-                  <span className="text-5xl font-bold">{selectedCity.overall}</span>
-                  <span className="text-2xl text-muted-foreground mb-1">/100</span>
+                  <span 
+                    className="text-5xl font-bold"
+                    style={{ color: 'white' }}
+                  >
+                    {selectedCity.overall}
+                  </span>
+                  <span 
+                    className="text-2xl mb-1"
+                    style={{ color: '#A0AEC0' }}
+                  >
+                    /100
+                  </span>
                 </div>
-                <Progress
-                  value={selectedCity.overall}
-                  className={`h-3 ${animateScores ? "transition-all duration-1000" : ""}`}
-                />
-              </CardContent>
-            </Card>
+                <div 
+                  className="w-full h-3 rounded-full overflow-hidden"
+                  style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                >
+                  <div 
+                    className="h-full rounded-full transition-all"
+                    style={{ 
+                      width: `${selectedCity.overall}%`, 
+                      background: getRiskColor(selectedCity.overall),
+                      transition: animateScores ? 'width 1s ease-out' : 'none'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
 
             {/* Individual Risk Bars */}
-            <Card>
-              <CardContent className="p-6 space-y-6">
+            <div 
+              className="relative"
+              style={{ 
+                borderRadius: '20px',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Background Layer 1 - Backdrop blur */}
+              <div 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+                  borderRadius: '20px',
+                  backdropFilter: 'blur(60px)',
+                  zIndex: 1
+                }}
+              />
+              
+              {/* Background Layer 2 - Gradient overlay */}
+              <div 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+                  borderRadius: '20px',
+                  zIndex: 2
+                }}
+              />
+              
+              {/* Content */}
+              <div 
+                className="relative z-10 p-6 space-y-6"
+                style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
+              >
                 {/* Flood Risk */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                        <Droplets className="h-4 w-4 text-blue-600" />
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center"
+                        style={{ background: 'rgba(59, 130, 246, 0.2)' }}
+                      >
+                        <Droplets className="h-4 w-4" style={{ color: '#0075FF' }} />
                       </div>
-                      <span className="font-medium">🌊 Flood Risk</span>
+                      <span 
+                        className="font-medium"
+                        style={{ color: 'white' }}
+                      >
+                        🌊 Flood Risk
+                      </span>
                     </div>
-                    <span className="font-bold">{selectedCity.flood}%</span>
+                    <span 
+                      className="font-bold"
+                      style={{ color: 'white' }}
+                    >
+                      {selectedCity.flood}%
+                    </span>
                   </div>
-                  <Progress
-                    value={selectedCity.flood}
-                    className={`h-2 ${animateScores ? "transition-all duration-700 delay-200" : ""}`}
-                  />
+                  <div 
+                    className="w-full h-2 rounded-full overflow-hidden"
+                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  >
+                    <div 
+                      className="h-full rounded-full transition-all"
+                      style={{ 
+                        width: `${selectedCity.flood}%`, 
+                        background: '#0075FF',
+                        transition: animateScores ? 'width 0.7s ease-out 0.2s' : 'none'
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* Wildfire Risk */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
-                        <Flame className="h-4 w-4 text-orange-600" />
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center"
+                        style={{ background: 'rgba(249, 115, 22, 0.2)' }}
+                      >
+                        <Flame className="h-4 w-4" style={{ color: '#F97316' }} />
                       </div>
-                      <span className="font-medium">🔥 Wildfire Risk</span>
+                      <span 
+                        className="font-medium"
+                        style={{ color: 'white' }}
+                      >
+                        🔥 Wildfire Risk
+                      </span>
                     </div>
-                    <span className="font-bold">{selectedCity.wildfire}%</span>
+                    <span 
+                      className="font-bold"
+                      style={{ color: 'white' }}
+                    >
+                      {selectedCity.wildfire}%
+                    </span>
                   </div>
-                  <Progress
-                    value={selectedCity.wildfire}
-                    className={`h-2 ${animateScores ? "transition-all duration-700 delay-400" : ""}`}
-                  />
+                  <div 
+                    className="w-full h-2 rounded-full overflow-hidden"
+                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  >
+                    <div 
+                      className="h-full rounded-full transition-all"
+                      style={{ 
+                        width: `${selectedCity.wildfire}%`, 
+                        background: '#F97316',
+                        transition: animateScores ? 'width 0.7s ease-out 0.4s' : 'none'
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* Storm Risk */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                        <Wind className="h-4 w-4 text-gray-600" />
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center"
+                        style={{ background: 'rgba(148, 163, 184, 0.2)' }}
+                      >
+                        <Wind className="h-4 w-4" style={{ color: '#94A3B8' }} />
                       </div>
-                      <span className="font-medium">🌀 Storm Risk</span>
+                      <span 
+                        className="font-medium"
+                        style={{ color: 'white' }}
+                      >
+                        🌀 Storm Risk
+                      </span>
                     </div>
-                    <span className="font-bold">{selectedCity.storm}%</span>
+                    <span 
+                      className="font-bold"
+                      style={{ color: 'white' }}
+                    >
+                      {selectedCity.storm}%
+                    </span>
                   </div>
-                  <Progress
-                    value={selectedCity.storm}
-                    className={`h-2 ${animateScores ? "transition-all duration-700 delay-600" : ""}`}
-                  />
+                  <div 
+                    className="w-full h-2 rounded-full overflow-hidden"
+                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  >
+                    <div 
+                      className="h-full rounded-full transition-all"
+                      style={{ 
+                        width: `${selectedCity.storm}%`, 
+                        background: '#94A3B8',
+                        transition: animateScores ? 'width 0.7s ease-out 0.6s' : 'none'
+                      }}
+                    />
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* AI Insights */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+            <div 
+              className="relative"
+              style={{ 
+                borderRadius: '20px',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Background Layer 1 - Backdrop blur */}
+              <div 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+                  borderRadius: '20px',
+                  backdropFilter: 'blur(60px)',
+                  zIndex: 1
+                }}
+              />
+              
+              {/* Background Layer 2 - Gradient overlay */}
+              <div 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+                  borderRadius: '20px',
+                  zIndex: 2
+                }}
+              />
+              
+              {/* Content */}
+              <div 
+                className="relative z-10 p-6"
+                style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
+              >
+                <h3 
+                  className="text-lg font-bold mb-4 flex items-center gap-2"
+                  style={{ color: 'white' }}
+                >
                   💡 AI Insights - Why This Risk Score?
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+                </h3>
                 <ul className="space-y-2">
                   {selectedCity.insights.map((insight, index) => (
                     <li key={index} className="flex items-start gap-2">
-                      <span className="text-primary mt-1">•</span>
-                      <span className="text-sm">{insight}</span>
+                      <span 
+                        className="mt-1"
+                        style={{ color: '#0075FF' }}
+                      >
+                        •
+                      </span>
+                      <span 
+                        className="text-sm"
+                        style={{ color: '#A0AEC0' }}
+                      >
+                        {insight}
+                      </span>
                     </li>
                   ))}
                 </ul>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Action Buttons */}
             <div className="flex flex-col gap-2">
-              <Button className="w-full">
+              <Button 
+                className="w-full"
+                style={{
+                  background: '#0075FF',
+                  color: 'white',
+                  border: 'none'
+                }}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Download Risk Report
               </Button>
-              <Button variant="outline" className="w-full">
+              <Button 
+                variant="outline" 
+                className="w-full"
+                style={{
+                  background: 'rgba(26, 31, 55, 0.4)',
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                  color: 'white'
+                }}
+              >
                 <Mail className="h-4 w-4 mr-2" />
                 Email Quote
               </Button>
             </div>
 
             {/* Disclaimer */}
-            <Card className="bg-muted/50">
-              <CardContent className="p-4">
+            <div 
+              className="relative"
+              style={{ 
+                borderRadius: '20px',
+                overflow: 'hidden',
+                background: 'rgba(26, 31, 55, 0.3)'
+              }}
+            >
+              <div 
+                className="p-4"
+                style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
+              >
                 <div className="flex gap-2">
-                  <AlertCircle className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground">
+                  <AlertCircle 
+                    className="h-4 w-4 flex-shrink-0 mt-0.5" 
+                    style={{ color: '#A0AEC0' }}
+                  />
+                  <p 
+                    className="text-xs"
+                    style={{ color: '#A0AEC0' }}
+                  >
                     Risk scores calculated using satellite imagery, historical climate data, terrain
                     analysis, and real-time weather patterns.
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
           {/* RIGHT PANEL - Map */}
           <div className="lg:col-span-3">
-            <Card className="h-full">
-              <CardContent className="p-0 h-[800px]">
+            <div 
+              className="relative h-full rounded-[20px] overflow-hidden"
+              style={{ 
+                borderRadius: '20px',
+                background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+                backdropFilter: 'blur(60px)'
+              }}
+            >
+              <div className="h-[800px] relative">
                 <RiskMap
                   center={selectedCity.coords}
                   zoom={12}
                   riskLevel={selectedCity.overall}
                 />
-                <div className="absolute bottom-4 left-4 right-4 flex justify-between text-xs bg-white/90 backdrop-blur-sm p-2 rounded">
+                <div 
+                  className="absolute bottom-4 left-4 right-4 flex justify-between text-xs p-2 rounded"
+                  style={{ 
+                    background: 'rgba(26, 31, 55, 0.9)',
+                    backdropFilter: 'blur(10px)',
+                    color: '#A0AEC0'
+                  }}
+                >
                   <span>Lat: {selectedCity.coords[0].toFixed(4)}°</span>
                   <span>Lon: {selectedCity.coords[1].toFixed(4)}°</span>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </div>
       )}
