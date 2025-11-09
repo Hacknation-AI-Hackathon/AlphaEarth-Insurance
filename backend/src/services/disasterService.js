@@ -14,12 +14,19 @@ class DisasterService {
 
   /**
    * Get active hurricanes from NOAA - REAL-TIME
+   * Note: Hurricane Milton and Helene are always mock data, all others are real-time
    */
   async getActiveHurricanes() {
     const cacheKey = 'active_hurricanes';
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
+    // Mock hurricane names that should always use mock data
+    const mockHurricaneNames = ['Hurricane Milton', 'Hurricane Helene', 'Milton', 'Helene'];
+    
+    // Get mock hurricanes (Milton and Helene)
+    const mockHurricanes = this.getMockHurricanes();
+    
     this.usingMockHurricanes = false;
 
     try {
@@ -39,8 +46,24 @@ class DisasterService {
         const hurricanes = this.parseNOAARSS(rssResponse.data);
         if (hurricanes.length > 0) {
           console.log(`Found ${hurricanes.length} active storms from NOAA RSS`);
-          cache.set(cacheKey, hurricanes);
-          return hurricanes;
+          
+          // Filter out Milton and Helene from real-time data (replace with mock versions)
+          const realTimeHurricanes = hurricanes.filter(h => {
+            const name = h.name || '';
+            return !mockHurricaneNames.some(mockName => 
+              name.toLowerCase().includes(mockName.toLowerCase())
+            );
+          });
+          
+          // Combine: real-time hurricanes + mock Milton and Helene
+          const combinedHurricanes = [
+            ...realTimeHurricanes.map(h => ({ ...h, isMock: false })), 
+            ...mockHurricanes.map(h => ({ ...h, isMock: true }))
+          ];
+          console.log(`Combined ${realTimeHurricanes.length} real-time hurricanes with ${mockHurricanes.length} mock hurricanes (Milton, Helene)`);
+          
+          cache.set(cacheKey, combinedHurricanes);
+          return combinedHurricanes;
         }
       }
 
@@ -60,16 +83,24 @@ class DisasterService {
       }
 
       if (!Array.isArray(stormData) || stormData.length === 0) {
-        console.log('No active storms found, using mock data for demo');
+        console.log('No active storms found from NOAA, returning mock Milton and Helene only');
         this.usingMockHurricanes = true;
-        return this.getMockHurricanes();
+        cache.set(cacheKey, mockHurricanes);
+        return mockHurricanes;
       }
 
-      const hurricanes = stormData
+      const realTimeHurricanes = stormData
         .filter(storm => {
           const isTropical = storm.isTropical === "true" || storm.isTropical === true;
           const isSubtropical = storm.isSubtropical === "true" || storm.isSubtropical === true;
           return isTropical || isSubtropical;
+        })
+        .filter(storm => {
+          // Filter out Milton and Helene from real-time data
+          const name = storm.name || '';
+          return !mockHurricaneNames.some(mockName => 
+            name.toLowerCase().includes(mockName.toLowerCase())
+          );
         })
         .map(storm => ({
           id: storm.id || storm.stormId || `storm-${Date.now()}`,
@@ -84,18 +115,25 @@ class DisasterService {
           intensity: storm.intensity || 'Unknown',
           classification: storm.classification || storm.type || 'Tropical System',
           movement: storm.movement || 'Unknown',
-          lastUpdated: storm.lastUpdate || new Date().toISOString()
+          lastUpdated: storm.lastUpdate || new Date().toISOString(),
+          isMock: false
         }));
 
-      console.log(`Found ${hurricanes.length} active hurricanes from NOAA API`);
-      cache.set(cacheKey, hurricanes);
-      return hurricanes;
+      console.log(`Found ${realTimeHurricanes.length} real-time hurricanes from NOAA API`);
+      
+      // Combine: real-time hurricanes + mock Milton and Helene
+      const combinedHurricanes = [...realTimeHurricanes, ...mockHurricanes.map(h => ({ ...h, isMock: true }))];
+      console.log(`Combined ${realTimeHurricanes.length} real-time hurricanes with ${mockHurricanes.length} mock hurricanes (Milton, Helene)`);
+      
+      cache.set(cacheKey, combinedHurricanes);
+      return combinedHurricanes;
 
     } catch (error) {
       console.error('Error fetching hurricanes from NOAA:', error.message);
-      console.log('Using mock hurricane data for demo');
+      console.log('Returning mock Milton and Helene only');
       this.usingMockHurricanes = true;
-      return this.getMockHurricanes();
+      cache.set(cacheKey, mockHurricanes);
+      return mockHurricanes.map(h => ({ ...h, isMock: true }));
     }
   }
 
@@ -143,7 +181,8 @@ class DisasterService {
               intensity: classification,
               classification: classification,
               movement: 'See NOAA for details',
-              lastUpdated: pubDateMatch ? new Date(pubDateMatch[1]).toISOString() : new Date().toISOString()
+              lastUpdated: pubDateMatch ? new Date(pubDateMatch[1]).toISOString() : new Date().toISOString(),
+              isMock: false
             });
           }
         }
@@ -323,6 +362,8 @@ class DisasterService {
 
   /**
    * Get detailed hurricane forecast data
+   * For mock hurricanes (Milton, Helene), uses mock forecast data
+   * For real-time hurricanes, generates forecast based on real-time data
    */
   async getHurricaneForecast(stormId) {
     const cacheKey = `hurricane_forecast_${stormId}`;
@@ -330,8 +371,6 @@ class DisasterService {
     if (cached) return cached;
 
     try {
-      // For real-time, we would fetch from NOAA GIS services
-      // For now, generate realistic forecast data based on storm ID
       const hurricaneList = await this.getActiveHurricanes();
       const hurricane = hurricaneList.find(h => h.id === stormId);
 
@@ -339,17 +378,31 @@ class DisasterService {
         throw new Error(`Hurricane ${stormId} not found`);
       }
 
+      // Check if this is a mock hurricane (Milton or Helene)
+      const isMockHurricane = hurricane.isMock === true || 
+                              hurricane.name?.includes('Milton') || 
+                              hurricane.name?.includes('Helene');
+
+      if (isMockHurricane) {
+        console.log(`Using mock forecast data for ${hurricane.name} (stormId: ${stormId})`);
+      } else {
+        console.log(`Generating forecast data for real-time hurricane ${hurricane.name} (stormId: ${stormId})`);
+      }
+
+      // For real-time hurricanes, we would ideally fetch from NOAA GIS services
+      // For now, generate realistic forecast data based on current hurricane data
       const forecastData = {
         stormId,
         center: hurricane.coordinates,
         maxWindSpeed: this.estimateWindSpeed(hurricane.intensity),
-        centralPressure: 950,
-        movementSpeed: 12,
-        movementDirection: 'NNE',
-        forecastTrack: this.generateForecastTrack(hurricane.coordinates.lat, hurricane.coordinates.lon),
+        centralPressure: isMockHurricane ? 950 : this.estimatePressure(hurricane.intensity),
+        movementSpeed: this.extractMovementSpeed(hurricane.movement) || 12,
+        movementDirection: this.extractMovementDirection(hurricane.movement) || 'NNE',
+        forecastTrack: this.generateForecastTrack(hurricane.coordinates.lat, hurricane.coordinates.lon, isMockHurricane),
         coneOfUncertainty: this.generateConeOfUncertainty(hurricane.coordinates.lat, hurricane.coordinates.lon),
         windRadii: this.getWindRadiiFromIntensity(hurricane.intensity),
-        stormSurgeZones: this.generateStormSurgeZones(hurricane.coordinates.lat, hurricane.coordinates.lon)
+        stormSurgeZones: this.generateStormSurgeZones(hurricane.coordinates.lat, hurricane.coordinates.lon),
+        isMock: isMockHurricane
       };
 
       cache.set(cacheKey, forecastData);
@@ -358,6 +411,43 @@ class DisasterService {
       console.error('Error fetching hurricane forecast:', error.message);
       throw error;
     }
+  }
+  
+  /**
+   * Estimate central pressure from intensity
+   */
+  estimatePressure(intensity) {
+    const intensityLower = (intensity || '').toLowerCase();
+    if (intensityLower.includes('category 5') || intensityLower.includes('cat 5')) return 920;
+    if (intensityLower.includes('category 4') || intensityLower.includes('cat 4')) return 940;
+    if (intensityLower.includes('category 3') || intensityLower.includes('cat 3')) return 960;
+    if (intensityLower.includes('category 2') || intensityLower.includes('cat 2')) return 970;
+    if (intensityLower.includes('category 1') || intensityLower.includes('cat 1')) return 980;
+    if (intensityLower.includes('tropical storm')) return 990;
+    return 970; // default
+  }
+  
+  /**
+   * Extract movement speed from movement string (e.g., "NNE at 12 mph" -> 12)
+   */
+  extractMovementSpeed(movement) {
+    if (!movement) return null;
+    const match = movement.match(/(\d+)\s*mph/i);
+    return match ? parseFloat(match[1]) : null;
+  }
+  
+  /**
+   * Extract movement direction from movement string (e.g., "NNE at 12 mph" -> "NNE")
+   */
+  extractMovementDirection(movement) {
+    if (!movement) return null;
+    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    for (const dir of directions) {
+      if (movement.toUpperCase().includes(dir)) {
+        return dir;
+      }
+    }
+    return null;
   }
 
   /**
@@ -450,15 +540,23 @@ class DisasterService {
 
   /**
    * Generate forecast track points
+   * @param {number} startLat - Starting latitude
+   * @param {number} startLon - Starting longitude
+   * @param {boolean} isMock - Whether this is a mock hurricane (for consistent mock data)
    */
-  generateForecastTrack(startLat, startLon) {
+  generateForecastTrack(startLat, startLon, isMock = false) {
     const track = [];
+    // For mock hurricanes, use more predictable track
+    // For real-time, vary the track based on actual movement patterns
+    const latIncrement = isMock ? 0.5 : (0.3 + Math.random() * 0.4);
+    const lonIncrement = isMock ? 0.3 : (0.2 + Math.random() * 0.3);
+    
     for (let i = 0; i <= 5; i++) {
       track.push({
         hour: i * 24,
-        lat: startLat + (i * 0.5),
-        lon: startLon + (i * 0.3),
-        windSpeed: 140 - (i * 10),
+        lat: startLat + (i * latIncrement),
+        lon: startLon + (i * lonIncrement),
+        windSpeed: isMock ? (140 - (i * 10)) : (120 - (i * 8) + Math.random() * 10),
         timestamp: new Date(Date.now() + i * 24 * 3600000).toISOString()
       });
     }
@@ -526,7 +624,7 @@ class DisasterService {
   }
 
   /**
-   * Mock hurricane data (fallback when no real storms active)
+   * Mock hurricane data (Milton and Helene only - always returned)
    */
   getMockHurricanes() {
     return [
@@ -540,7 +638,8 @@ class DisasterService {
         intensity: 'Category 4',
         classification: 'Hurricane',
         movement: 'NNE at 12 mph',
-        lastUpdated: new Date(Date.now() - 5 * 60000).toISOString()
+        lastUpdated: new Date(Date.now() - 5 * 60000).toISOString(),
+        isMock: true
       },
       {
         id: 'al102024',
@@ -552,7 +651,8 @@ class DisasterService {
         intensity: 'Category 2',
         classification: 'Hurricane',
         movement: 'N at 8 mph',
-        lastUpdated: new Date(Date.now() - 28 * 60000).toISOString()
+        lastUpdated: new Date(Date.now() - 28 * 60000).toISOString(),
+        isMock: true
       }
     ];
   }
@@ -608,7 +708,11 @@ class DisasterService {
 
       const results = await Promise.all(promises);
 
-      const hurricanes = results[0].map(h => ({ ...h, isMock: this.usingMockHurricanes }));
+      // Preserve isMock flag from getActiveHurricanes (Milton and Helene are mock, others are real-time)
+      const hurricanes = results[0].map(h => ({ 
+        ...h, 
+        isMock: h.isMock !== undefined ? h.isMock : false 
+      }));
       const wildfires = results[1].map(w => ({ ...w, isMock: this.usingMockWildfires }));
       const earthquakes = includeEarthquakes ? results[2].map(e => ({ ...e, isMock: earthquakeService.usingMockEarthquakes })) : [];
       const severeWeather = includeSevereWeather ? results[includeEarthquakes ? 3 : 2].map(s => ({ ...s, isMock: severeWeatherService.usingMockSevereWeather })) : [];
@@ -617,7 +721,9 @@ class DisasterService {
         new Date(b.lastUpdated) - new Date(a.lastUpdated)
       );
 
-      console.log(`Total active disasters: ${allDisasters.length} (${hurricanes.length} hurricanes, ${wildfires.length} wildfires, ${earthquakes.length} earthquakes, ${severeWeather.length} severe weather)`);
+      const mockHurricaneCount = hurricanes.filter(h => h.isMock).length;
+      const realTimeHurricaneCount = hurricanes.length - mockHurricaneCount;
+      console.log(`Total active disasters: ${allDisasters.length} (${hurricanes.length} hurricanes: ${realTimeHurricaneCount} real-time, ${mockHurricaneCount} mock [Milton, Helene], ${wildfires.length} wildfires, ${earthquakes.length} earthquakes, ${severeWeather.length} severe weather)`);
 
       return allDisasters;
     } catch (error) {

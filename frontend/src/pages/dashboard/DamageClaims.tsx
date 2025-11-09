@@ -505,10 +505,56 @@ export default function DamageClaims() {
                 }}>
                   <SelectValue placeholder="Select hazard" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="flood">Flood</SelectItem>
-                  <SelectItem value="wildfire">Wildfire</SelectItem>
-                  <SelectItem value="roof">Roof Damage</SelectItem>
+                <SelectContent 
+                  style={{ 
+                    background: 'rgba(26, 31, 55, 0.95)',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+                    padding: '4px'
+                  }}
+                >
+                  <SelectItem 
+                    value="flood"
+                    style={{ 
+                      color: 'white',
+                      fontFamily: 'Plus Jakarta Display, sans-serif',
+                      fontSize: '14px',
+                      borderRadius: '6px',
+                      margin: '2px 0'
+                    }}
+                    className="hover:bg-white/10 focus:bg-white/10"
+                  >
+                    Flood
+                  </SelectItem>
+                  <SelectItem 
+                    value="wildfire"
+                    style={{ 
+                      color: 'white',
+                      fontFamily: 'Plus Jakarta Display, sans-serif',
+                      fontSize: '14px',
+                      borderRadius: '6px',
+                      margin: '2px 0'
+                    }}
+                    className="hover:bg-white/10 focus:bg-white/10"
+                  >
+                    Wildfire
+                  </SelectItem>
+                  <SelectItem 
+                    value="roof"
+                    style={{ 
+                      color: 'white',
+                      fontFamily: 'Plus Jakarta Display, sans-serif',
+                      fontSize: '14px',
+                      borderRadius: '6px',
+                      margin: '2px 0'
+                    }}
+                    className="hover:bg-white/10 focus:bg-white/10"
+                  >
+                    Roof Damage
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>

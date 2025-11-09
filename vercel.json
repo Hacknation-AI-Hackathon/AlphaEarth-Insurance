@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "buildCommand": "cd frontend && npm install --legacy-peer-deps && npm run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "npm install --legacy-peer-deps",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/api/python/(.*)",
+      "destination": "/api/python/$1"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 60
+    },
+    "api/python/**/*.py": {
+      "runtime": "python3.9",
+      "maxDuration": 300
+    }
+  }
+}

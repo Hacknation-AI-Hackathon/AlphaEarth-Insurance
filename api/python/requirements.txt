@@ -1,29 +1,20 @@
-# Web Framework
+# This file tells Vercel which Python packages to install
+# It should mirror backend/python-service/requirements.txt
 flask
 flask-cors
-
-# Google Earth Engine
 earthengine-api
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
-
-# Data Processing
 numpy
 opencv-python
 scikit-image
 Pillow
-
-# Environment & Configuration
 python-dotenv
-
-# HTTP & Async
 requests
 aiohttp
-
-# Data Validation
 pydantic
-
-# Utilities
 python-dateutil
 pytz
+serverless-http
+

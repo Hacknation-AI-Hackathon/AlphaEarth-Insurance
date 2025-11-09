@@ -1,11 +1,18 @@
 import { Button } from "@/components/ui/button";
-import { RefreshCw, AlertTriangle, Flame, Wind, Cloud, Zap, Loader2 } from "lucide-react";
+import { RefreshCw, AlertTriangle, Flame, Wind, Cloud, Zap, Loader2, ChevronDown, Filter } from "lucide-react";
 import { useActiveDisasters, useHurricanes, useWildfires, useActiveEarthquakes, useActiveSevereWeather } from "@/hooks/useDisasters";
 import { useState, useMemo } from "react";
 import { apiClient } from "@/lib/api";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { DisasterImpactPopup } from "@/components/DisasterImpactPopup";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function ImpactMap() {
   // Fetch real disaster data
@@ -21,6 +28,11 @@ export default function ImpactMap() {
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
 
+  // Filter and sort state
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterSource, setFilterSource] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("most-recent");
+
   // Check if any data is loading
   const isLoading = hurricanesLoading || wildfiresLoading || earthquakesLoading || severeWeatherLoading;
 
@@ -28,25 +40,27 @@ export default function ImpactMap() {
   const allDisasters = useMemo(() => {
     const disasters: any[] = [];
     
-    // Debug logging
-    console.log("Impact Map - Disaster Data:", {
-      hurricanes: hurricanesData,
-      wildfires: wildfiresData,
-      earthquakes: earthquakesData,
-      severeWeather: severeWeatherData
-    });
-    
     // Add hurricanes
     if (hurricanesData?.data && Array.isArray(hurricanesData.data)) {
       hurricanesData.data.forEach((h: any) => {
+        const isMock = h.isMock === true || h.name?.includes('Milton') || h.name?.includes('Helene');
+        const riskLevel = h.intensity?.includes('Category 4') || h.intensity?.includes('Category 5') 
+          ? 'CRITICAL' 
+          : h.status === 'warning' 
+          ? 'ACTIVE' 
+          : 'MONITORING';
+        
         disasters.push({
           ...h,
           type: 'hurricane',
           icon: Wind,
-          statusTags: ['mock'],
-          name: h.name || `Hurricane ${h.id}`,
+          displayType: 'Hurricane',
+          displayName: h.name?.replace('Hurricane ', '') || h.name || `Hurricane ${h.id}`,
           location: h.location || h.region || 'Unknown',
-          isRealTime: false
+          isRealTime: !isMock,
+          isMock: isMock,
+          riskLevel: riskLevel,
+          source: isMock ? 'MOCK' : 'LIVE'
         });
       });
     }
@@ -54,81 +68,74 @@ export default function ImpactMap() {
     // Add wildfires
     if (wildfiresData?.data && Array.isArray(wildfiresData.data)) {
       wildfiresData.data.forEach((w: any, idx: number) => {
+        const isMock = w.isMock === true;
         disasters.push({
           ...w,
           type: 'wildfire',
           icon: Flame,
-          statusTags: ['mock'],
-          name: w.name || `Active Fire ${idx + 1}`,
+          displayType: 'Wildfire',
+          displayName: w.name || `Active Fire ${idx + 1}`,
           location: w.location || w.region || 'United States',
-          isRealTime: false
+          isRealTime: !isMock,
+          isMock: isMock,
+          riskLevel: w.status === 'active' ? 'ACTIVE' : 'MONITORING',
+          source: isMock ? 'MOCK' : 'LIVE'
         });
       });
     }
     
-    // Add earthquakes - only keep one (the oldest one to remove the duplicate)
-    if (earthquakesData?.data && Array.isArray(earthquakesData.data) && earthquakesData.data.length > 0) {
-      // Sort earthquakes by date (oldest first) and take only the first one (oldest)
-      const sortedEarthquakes = [...earthquakesData.data].sort((a, b) => {
-        const dateA = new Date(a.time || a.timestamp || 0);
-        const dateB = new Date(b.time || b.timestamp || 0);
-        return dateA.getTime() - dateB.getTime(); // Oldest first
-      });
-      
-      // Take only the oldest earthquake (first in sorted array)
-      const e = sortedEarthquakes[0];
-      
-      // Format earthquake title - simple format with magnitude only
-      let earthquakeTitle = 'Earthquake';
-      
-      // Use magnitude if available, otherwise just "Earthquake"
-      if (e.mag) {
-        earthquakeTitle = `M ${e.mag} Earthquake`;
-      }
-      
-      disasters.push({
-        ...e,
-        type: 'earthquake',
-        icon: AlertTriangle,
-        statusTags: ['active'],
-        name: earthquakeTitle,
-        location: e.place || 'Unknown',
-        isRealTime: true
+    // Add earthquakes
+    if (earthquakesData?.data && Array.isArray(earthquakesData.data)) {
+      earthquakesData.data.forEach((e: any) => {
+        const isMock = e.isMock === true;
+        let earthquakeTitle = 'Earthquake';
+        if (e.mag) {
+          earthquakeTitle = `M ${e.mag}`;
+        }
+        
+        const riskLevel = e.mag >= 5.0 ? 'CRITICAL' : e.mag >= 4.5 ? 'ACTIVE' : 'MONITORING';
+        
+        disasters.push({
+          ...e,
+          type: 'earthquake',
+          icon: AlertTriangle,
+          displayType: 'Earthquake',
+          displayName: earthquakeTitle,
+          location: e.place || 'Unknown',
+          isRealTime: !isMock,
+          isMock: isMock,
+          riskLevel: riskLevel,
+          source: isMock ? 'MOCK' : 'LIVE'
+        });
       });
     }
     
     // Add severe weather
     if (severeWeatherData?.data && Array.isArray(severeWeatherData.data)) {
       severeWeatherData.data.forEach((s: any) => {
-        // Format flood/severe weather title - extract just the warning type
-        let weatherTitle = 'Severe Weather Warning';
+        const isMock = s.isMock === true;
+        let weatherTitle = 'Severe Weather';
+        let weatherType = 'Severe Weather';
         
         if (s.headline) {
-          // Extract warning type by splitting on "issued" or "by"
-          // Example: "Flood Warning issued November 8 at 8:01PM EST by NWS Melbourne FL"
-          // Result: "Flood Warning"
-          
           let cleanHeadline = s.headline.trim();
-          
-          // Split on "issued" - take the part before it
           if (cleanHeadline.toLowerCase().includes('issued')) {
             const parts = cleanHeadline.split(/issued/i);
             cleanHeadline = parts[0].trim();
           }
-          
-          // Split on "by" - take the part before it
           if (cleanHeadline.toLowerCase().includes(' by ')) {
             const parts = cleanHeadline.split(/\s+by\s+/i);
             cleanHeadline = parts[0].trim();
           }
-          
-          // Use the cleaned headline as the title
           if (cleanHeadline && cleanHeadline.length > 0) {
             weatherTitle = cleanHeadline;
-            
-            // If still too long, truncate
-            if (weatherTitle.length > 50) {
-              weatherTitle = weatherTitle.substring(0, 47).trim() + '...';
+            // Extract type (e.g., "Flood Warning" -> "Flood")
+            const typeMatch = cleanHeadline.match(/^(\w+)/);
+            if (typeMatch) {
+              weatherType = typeMatch[1];
+            }
+            if (weatherTitle.length > 30) {
+              weatherTitle = weatherTitle.substring(0, 27).trim() + '...';
             }
           }
         }
@@ -137,31 +144,67 @@ export default function ImpactMap() {
           ...s,
           type: 'severe-weather',
           icon: Cloud,
-          statusTags: ['active'],
-          name: weatherTitle,
+          displayType: weatherType,
+          displayName: weatherTitle,
           location: s.areaDesc || 'Unknown',
-          isRealTime: true
+          isRealTime: !isMock,
+          isMock: isMock,
+          riskLevel: 'ACTIVE',
+          source: isMock ? 'MOCK' : 'LIVE'
         });
       });
     }
     
-    console.log("Impact Map - Combined Disasters:", disasters.length);
-    
-    // Sort: real-time disasters (earthquakes and severe-weather) first, then by date
-    return disasters.sort((a, b) => {
-      // Prioritize real-time disasters
-      const aIsRealTime = a.isRealTime || a.type === 'earthquake' || a.type === 'severe-weather';
-      const bIsRealTime = b.isRealTime || b.type === 'earthquake' || b.type === 'severe-weather';
-      
-      if (aIsRealTime && !bIsRealTime) return -1;
-      if (!aIsRealTime && bIsRealTime) return 1;
-      
-      // Within same category, sort by date
-      const dateA = new Date(a.lastUpdated || a.timestamp || a.time || 0);
-      const dateB = new Date(b.lastUpdated || b.timestamp || b.time || 0);
-      return dateB.getTime() - dateA.getTime();
-    });
+    return disasters;
   }, [hurricanesData, wildfiresData, earthquakesData, severeWeatherData]);
+
+  // Filter and sort disasters
+  const filteredAndSortedDisasters = useMemo(() => {
+    let filtered = [...allDisasters];
+
+    // Filter by type
+    if (filterType !== "all") {
+      filtered = filtered.filter(d => d.type === filterType);
+    }
+
+    // Filter by source
+    if (filterSource !== "all") {
+      filtered = filtered.filter(d => {
+        if (filterSource === "mock") return d.isMock === true;
+        if (filterSource === "live") return d.isMock === false;
+        return true;
+      });
+    }
+
+    // Sort
+    if (sortBy === "most-recent") {
+      filtered.sort((a, b) => {
+        const dateA = new Date(a.lastUpdated || a.timestamp || a.time || 0);
+        const dateB = new Date(b.lastUpdated || b.timestamp || b.time || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+    } else if (sortBy === "highest-risk") {
+      const riskOrder = { 'CRITICAL': 3, 'ACTIVE': 2, 'MONITORING': 1 };
+      filtered.sort((a, b) => {
+        const aRisk = riskOrder[a.riskLevel as keyof typeof riskOrder] || 0;
+        const bRisk = riskOrder[b.riskLevel as keyof typeof riskOrder] || 0;
+        if (bRisk !== aRisk) return bRisk - aRisk;
+        // If same risk, sort by date
+        const dateA = new Date(a.lastUpdated || a.timestamp || a.time || 0);
+        const dateB = new Date(b.lastUpdated || b.timestamp || b.time || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+    } else if (sortBy === "by-type") {
+      filtered.sort((a, b) => {
+        if (a.type !== b.type) return a.type.localeCompare(b.type);
+        const dateA = new Date(a.lastUpdated || a.timestamp || a.time || 0);
+        const dateB = new Date(b.lastUpdated || b.timestamp || b.time || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+    }
+
+    return filtered;
+  }, [allDisasters, filterType, filterSource, sortBy]);
 
   // Handle analyze impact
   const analyzeImpact = useMutation({
@@ -230,19 +273,29 @@ export default function ImpactMap() {
     return AlertTriangle;
   };
 
-  // Get status tag color
-  const getStatusTagColor = (tag: string) => {
-    switch (tag.toLowerCase()) {
-      case 'active':
-        return { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.3)', color: '#22C55E' };
-      case 'critical':
-        return { bg: 'rgba(156, 163, 175, 0.2)', border: 'rgba(156, 163, 175, 0.3)', color: '#9CA3AF' };
-      case 'mock':
-        return { bg: 'rgba(239, 68, 68, 0.2)', border: 'rgba(239, 68, 68, 0.3)', color: '#EF4444' };
-      case 'warning':
-        return { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.3)', color: '#22C55E' };
+  // Get risk level color
+  const getRiskLevelColor = (riskLevel: string) => {
+    switch (riskLevel?.toUpperCase()) {
+      case 'CRITICAL':
+        return { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)', color: '#EF4444' };
+      case 'ACTIVE':
+        return { bg: 'rgba(234, 179, 8, 0.15)', border: 'rgba(234, 179, 8, 0.4)', color: '#EAB308' };
+      case 'MONITORING':
+        return { bg: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.4)', color: '#22C55E' };
       default:
-        return { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.3)', color: '#94A3B8' };
+        return { bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.4)', color: '#94A3B8' };
+    }
+  };
+
+  // Get source color
+  const getSourceColor = (source: string) => {
+    switch (source?.toUpperCase()) {
+      case 'MOCK':
+        return { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)', color: '#EF4444' };
+      case 'LIVE':
+        return { bg: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.4)', color: '#22C55E' };
+      default:
+        return { bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.4)', color: '#94A3B8' };
     }
   };
 
@@ -300,11 +353,272 @@ export default function ImpactMap() {
         </Button>
       </div>
 
+      {/* Filter and Sort Controls */}
+      <div 
+        className="relative"
+        style={{
+          borderRadius: '20px',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Background Layer 1 - Backdrop blur */}
+        <div 
+          style={{
+            width: '100%',
+            height: '100%',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+            borderRadius: '20px',
+            backdropFilter: 'blur(60px)',
+            zIndex: 1
+          }}
+        />
+        
+        {/* Background Layer 2 - Gradient overlay */}
+        <div 
+          style={{
+            width: '100%',
+            height: '100%',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+            borderRadius: '20px',
+            zIndex: 2
+          }}
+        />
+        
+        <div 
+          className="relative z-10 p-6"
+          style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
+        >
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+            {/* Filter Section */}
+            <div className="flex flex-col sm:flex-row gap-4 flex-1">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Filter className="h-4 w-4" style={{ color: '#A0AEC0' }} />
+                <span className="text-sm font-medium" style={{ color: '#A0AEC0', fontFamily: 'Plus Jakarta Display, sans-serif' }}>Filter:</span>
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger 
+                    className="w-[150px] h-9"
+                    style={{
+                      background: 'rgba(26, 31, 55, 0.6)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      color: 'white',
+                      fontFamily: 'Plus Jakarta Display, sans-serif',
+                      fontSize: '14px',
+                      fontWeight: '400'
+                    }}
+                  >
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent 
+                    className="z-50"
+                    style={{ 
+                      background: 'rgba(26, 31, 55, 0.95)',
+                      backdropFilter: 'blur(20px)',
+                      WebkitBackdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+                      padding: '4px'
+                    }}
+                  >
+                    <SelectItem 
+                      value="all" 
+                      style={{ 
+                        color: 'white',
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        fontSize: '14px',
+                        borderRadius: '6px',
+                        margin: '2px 0'
+                      }}
+                      className="hover:bg-white/10 focus:bg-white/10"
+                    >
+                      All Types
+                    </SelectItem>
+                    <SelectItem 
+                      value="hurricane" 
+                      style={{ 
+                        color: 'white',
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        fontSize: '14px',
+                        borderRadius: '6px',
+                        margin: '2px 0'
+                      }}
+                      className="hover:bg-white/10 focus:bg-white/10"
+                    >
+                      Hurricanes
+                    </SelectItem>
+                    <SelectItem 
+                      value="wildfire" 
+                      style={{ 
+                        color: 'white',
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        fontSize: '14px',
+                        borderRadius: '6px',
+                        margin: '2px 0'
+                      }}
+                      className="hover:bg-white/10 focus:bg-white/10"
+                    >
+                      Wildfires
+                    </SelectItem>
+                    <SelectItem 
+                      value="earthquake" 
+                      style={{ 
+                        color: 'white',
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        fontSize: '14px',
+                        borderRadius: '6px',
+                        margin: '2px 0'
+                      }}
+                      className="hover:bg-white/10 focus:bg-white/10"
+                    >
+                      Earthquakes
+                    </SelectItem>
+                    <SelectItem 
+                      value="severe-weather" 
+                      style={{ 
+                        color: 'white',
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        fontSize: '14px',
+                        borderRadius: '6px',
+                        margin: '2px 0'
+                      }}
+                      className="hover:bg-white/10 focus:bg-white/10"
+                    >
+                      Severe Weather
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterSource} onValueChange={setFilterSource}>
+                  <SelectTrigger 
+                    className="w-[150px] h-9"
+                    style={{
+                      background: 'rgba(26, 31, 55, 0.6)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      color: 'white',
+                      fontFamily: 'Plus Jakarta Display, sans-serif',
+                      fontSize: '14px',
+                      fontWeight: '400'
+                    }}
+                  >
+                    <SelectValue placeholder="All Sources" />
+                  </SelectTrigger>
+                  <SelectContent 
+                    className="z-50"
+                    style={{ 
+                      background: 'rgba(26, 31, 55, 0.95)',
+                      backdropFilter: 'blur(20px)',
+                      WebkitBackdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+                      padding: '4px'
+                    }}
+                  >
+                    <SelectItem 
+                      value="all" 
+                      style={{ 
+                        color: 'white',
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        fontSize: '14px',
+                        borderRadius: '6px',
+                        margin: '2px 0'
+                      }}
+                      className="hover:bg-white/10 focus:bg-white/10"
+                    >
+                      All Sources
+                    </SelectItem>
+                    <SelectItem 
+                      value="live" 
+                      style={{ 
+                        color: 'white',
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        fontSize: '14px',
+                        borderRadius: '6px',
+                        margin: '2px 0'
+                      }}
+                      className="hover:bg-white/10 focus:bg-white/10"
+                    >
+                      Live
+                    </SelectItem>
+                    <SelectItem 
+                      value="mock" 
+                      style={{ 
+                        color: 'white',
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        fontSize: '14px',
+                        borderRadius: '6px',
+                        margin: '2px 0'
+                      }}
+                      className="hover:bg-white/10 focus:bg-white/10"
+                    >
+                      Mock
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Sort Section */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium" style={{ color: '#A0AEC0' }}>Sort by:</span>
+              <div className="flex gap-2">
+                <Button
+                  variant={sortBy === "most-recent" ? "default" : "outline"}
+                  onClick={() => setSortBy("most-recent")}
+                  size="sm"
+                  style={{
+                    background: sortBy === "most-recent" ? '#0075FF' : 'rgba(26, 31, 55, 0.4)',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    color: 'white',
+                    borderRadius: '8px'
+                  }}
+                >
+                  Most Recent
+                </Button>
+                <Button
+                  variant={sortBy === "highest-risk" ? "default" : "outline"}
+                  onClick={() => setSortBy("highest-risk")}
+                  size="sm"
+                  style={{
+                    background: sortBy === "highest-risk" ? '#0075FF' : 'rgba(26, 31, 55, 0.4)',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    color: 'white',
+                    borderRadius: '8px'
+                  }}
+                >
+                  Highest Risk
+                </Button>
+                <Button
+                  variant={sortBy === "by-type" ? "default" : "outline"}
+                  onClick={() => setSortBy("by-type")}
+                  size="sm"
+                  style={{
+                    background: sortBy === "by-type" ? '#0075FF' : 'rgba(26, 31, 55, 0.4)',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    color: 'white',
+                    borderRadius: '8px'
+                  }}
+                >
+                  By Type
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Active Disasters Grid */}
       <div>
         <div className="mb-4" style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}>
           <h2 className="text-xl font-bold" style={{ color: 'white', fontFamily: 'Plus Jakarta Display, sans-serif' }}>
-            Active Disasters
+            Active Disasters ({filteredAndSortedDisasters.length})
           </h2>
         </div>
         
@@ -353,20 +667,24 @@ export default function ImpactMap() {
               <p style={{ color: '#A0AEC0' }}>Loading disaster data...</p>
             </div>
           </div>
-        ) : allDisasters.length > 0 ? (
+        ) : filteredAndSortedDisasters.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {allDisasters.map((disaster: any, idx: number) => {
+            {filteredAndSortedDisasters.map((disaster: any, idx: number) => {
               const IconComponent = getDisasterIcon(disaster);
               const lastUpdated = formatDate(disaster.lastUpdated || disaster.timestamp || disaster.time);
+              const riskColor = getRiskLevelColor(disaster.riskLevel || 'MONITORING');
+              const sourceColor = getSourceColor(disaster.source || 'LIVE');
               
               return (
                 <div
                   key={disaster.id || idx}
-                  className="relative"
+                  className="relative cursor-pointer hover:opacity-90 transition-opacity"
                   style={{
                     borderRadius: '20px',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    border: '1px solid rgba(255, 255, 255, 0.05)'
                   }}
+                  onClick={() => handleAnalyzeImpact(disaster)}
                 >
                   {/* Background Layer 1 - Backdrop blur */}
                   <div 
@@ -404,73 +722,95 @@ export default function ImpactMap() {
                       fontFamily: 'Plus Jakarta Display, sans-serif',
                     }}
                   >
-                    <div className="flex items-start justify-between mb-4">
-                      <div 
-                        style={{
-                          width: '45px',
-                          height: '45px',
-                          background: '#0075FF',
-                          boxShadow: '0px 3.5px 5.5px rgba(0, 0, 0, 0.02)',
-                          borderRadius: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0
-                        }}
-                      >
-                        <IconComponent className="h-5 w-5 text-white" />
+                    {/* Type and Status Tags */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            background: 'rgba(0, 117, 255, 0.2)',
+                            borderRadius: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}
+                        >
+                          <IconComponent className="h-5 w-5" style={{ color: '#0075FF' }} />
+                        </div>
+                        <div>
+                          <p 
+                            className="text-xs font-medium uppercase tracking-wide" 
+                            style={{ 
+                              color: '#A0AEC0',
+                              fontSize: '11px',
+                              letterSpacing: '0.5px'
+                            }}
+                          >
+                            {disaster.displayType || disaster.type}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-1 items-end flex-shrink-0 ml-2">
-                        {disaster.statusTags?.map((tag: string, tagIdx: number) => {
-                          const tagColor = getStatusTagColor(tag);
-                          return (
-                            <span
-                              key={tagIdx}
-                              className="px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
-                              style={{
-                                background: tagColor.bg,
-                                border: `1px solid ${tagColor.border}`,
-                                color: tagColor.color
-                              }}
-                            >
-                              {tag}
-                            </span>
-                          );
-                        })}
+                      <div className="flex flex-col gap-1.5 items-end">
+                        <span
+                          className="px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide"
+                          style={{
+                            background: sourceColor.bg,
+                            border: `1px solid ${sourceColor.border}`,
+                            color: sourceColor.color,
+                            fontFamily: 'monospace',
+                            letterSpacing: '0.5px'
+                          }}
+                        >
+                          [{disaster.source || 'LIVE'}]
+                        </span>
+                        <span
+                          className="px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide"
+                          style={{
+                            background: riskColor.bg,
+                            border: `1px solid ${riskColor.border}`,
+                            color: riskColor.color,
+                            fontFamily: 'monospace',
+                            letterSpacing: '0.5px'
+                          }}
+                        >
+                          [{disaster.riskLevel || 'MONITORING'}]
+                        </span>
                       </div>
                     </div>
                     
+                    {/* Disaster Name */}
                     <h3 
-                      className="font-bold text-lg mb-2 break-words" 
+                      className="font-bold text-xl mb-3 break-words" 
                       style={{ 
                         color: 'white', 
                         fontFamily: 'Plus Jakarta Display, sans-serif',
-                        lineHeight: '1.4'
+                        lineHeight: '1.3',
+                        fontSize: '20px'
                       }}
                     >
-                      {disaster.name}
+                      {disaster.displayName || disaster.name}
                     </h3>
+                    
+                    {/* Location */}
                     <p 
-                      className="text-sm mb-2 break-words" 
+                      className="text-sm mb-4 break-words" 
                       style={{ 
                         color: '#A0AEC0', 
-                        fontFamily: 'Plus Jakarta Display, sans-serif' 
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        lineHeight: '1.5'
                       }}
                     >
                       {disaster.location}
                     </p>
-                    <p 
-                      className="text-xs mb-4" 
-                      style={{ 
-                        color: '#718096', 
-                        fontFamily: 'Plus Jakarta Display, sans-serif' 
-                      }}
-                    >
-                      Updated {lastUpdated}
-                    </p>
                     
+                    {/* Analyze Button */}
                     <Button
-                      onClick={() => handleAnalyzeImpact(disaster)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAnalyzeImpact(disaster);
+                      }}
                       disabled={analyzeImpact.isPending}
                       className="w-full"
                       style={{
@@ -478,7 +818,8 @@ export default function ImpactMap() {
                         color: 'white',
                         border: 'none',
                         borderRadius: '12px',
-                        fontFamily: 'Plus Jakarta Display, sans-serif'
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        marginTop: 'auto'
                       }}
                     >
                       {analyzeImpact.isPending ? (
@@ -486,7 +827,7 @@ export default function ImpactMap() {
                       ) : (
                         <Zap className="h-4 w-4 mr-2" />
                       )}
-                      Analyze Impact &gt;
+                      Analyze Impact
                     </Button>
                   </div>
                 </div>

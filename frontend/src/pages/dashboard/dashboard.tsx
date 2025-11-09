@@ -6,38 +6,20 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import bradenImage from "@/assets/images/braden.jpg";
 import { useActiveDisasters, useHurricanes, useWildfires, useActiveEarthquakes } from "@/hooks/useDisasters";
 import { usePropertyPortfolio, useHighValueProperties } from "@/hooks/useProperties";
+import { useDashboardStatistics } from "@/hooks/useDashboard";
 
-// Summary Cards Data
-const statsCards = [
-  {
-    title: "Total Properties",
-    value: "12,847",
-    change: "+8%",
-    changeType: "positive" as const,
-    icon: Building,
-  },
-  {
-    title: "Active Claims",
-    value: "156",
-    change: "+12%",
-    changeType: "positive" as const,
-    icon: AlertTriangle,
-  },
-  {
-    title: "Risk Assessments",
-    value: "3,052",
-    change: "+23%",
-    changeType: "positive" as const,
-    icon: FileText,
-  },
-  {
-    title: "Total Payouts",
-    value: "$2.4M",
-    change: "+15%",
-    changeType: "positive" as const,
-    icon: DollarSign,
-  },
-];
+// Helper function to format currency
+const formatCurrency = (value: number) => {
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
+  if (value >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;
+  return `$${value.toFixed(0)}`;
+};
+
+// Helper function to format numbers
+const formatNumber = (value: number) => {
+  return value.toLocaleString();
+};
 
 // Claims Overview Data
 const claimsData = [
@@ -98,6 +80,9 @@ const chartConfig = {
 };
 
 export default function Dashboard() {
+  // Fetch dashboard statistics
+  const { data: dashboardStats, isLoading: statsLoading } = useDashboardStatistics();
+
   // Fetch real disaster data
   const { data: disasters, isLoading: disastersLoading } = useActiveDisasters();
   const { data: hurricanes, isLoading: hurricanesLoading } = useHurricanes();
@@ -108,8 +93,36 @@ export default function Dashboard() {
   const { data: properties, isLoading: propertiesLoading } = usePropertyPortfolio({ count: 100 });
   const { data: highValueProps, isLoading: highValueLoading } = useHighValueProperties({ minValue: 500000 });
 
+  // Extract statistics
+  const stats = dashboardStats?.statistics;
+  
+  // Build stats cards with risk metrics data (maintaining first row UI design)
+  const statsCards = [
+    {
+      title: "Properties at Risk",
+      value: stats?.properties?.atRisk ? formatNumber(stats.properties.atRisk) : "0",
+      icon: Building,
+    },
+    {
+      title: "Total Exposure",
+      value: stats?.properties?.totalExposure ? formatCurrency(stats.properties.totalExposure) : "$1.82B",
+      icon: DollarSign,
+    },
+    {
+      title: "Expected Loss",
+      value: stats?.disasters?.expectedLoss ? formatCurrency(stats.disasters.expectedLoss) : "$36.3M",
+      icon: TrendingUp,
+    },
+    {
+      title: "99th Percentile",
+      value: stats?.disasters?.percentile99Loss ? formatCurrency(stats.disasters.percentile99Loss) : "$37K",
+      icon: AlertTriangle,
+    },
+  ];
+
   // Log the data to console so you can see it working
   console.log("Dashboard Data:", {
+    dashboardStats,
     disasters: disasters?.data || [],
     hurricanes: hurricanes?.data || [],
     wildfires: wildfires?.data || [],
@@ -177,30 +190,18 @@ export default function Dashboard() {
                   position: 'absolute',
                   left: '21.50px',
                   top: '36.50px',
+                  right: '70px', // Add right margin to prevent overlap with icon
                   color: 'white',
                   fontSize: '18px',
                   fontFamily: 'Plus Jakarta Display, sans-serif',
                   fontWeight: '700',
-                  lineHeight: '25.20px'
+                  lineHeight: '25.20px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {stat.value}
-              </div>
-              
-              {/* Change percentage */}
-              <div 
-                style={{
-                  position: 'absolute',
-                  left: '100px',
-                  top: '40.50px',
-                  color: stat.changeType === "positive" ? '#01B574' : '#EF4444',
-                  fontSize: '14px',
-                  fontFamily: 'Plus Jakarta Display, sans-serif',
-                  fontWeight: '700',
-                  lineHeight: '19.60px'
-                }}
-              >
-                {stat.change}
               </div>
               
               {/* Icon */}
@@ -703,28 +704,28 @@ export default function Dashboard() {
                   <Building className="h-4 w-4" style={{ color: '#0075FF' }} />
                   <span className="text-xs" style={{ color: '#A0AEC0' }}>Properties</span>
                 </div>
-                <p className="text-white font-bold">12,847</p>
+                <p className="text-white font-bold">{stats?.properties?.total ? formatNumber(stats.properties.total) : "12,847"}</p>
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <AlertTriangle className="h-4 w-4" style={{ color: '#0075FF' }} />
                   <span className="text-xs" style={{ color: '#A0AEC0' }}>Claims</span>
                 </div>
-                <p className="text-white font-bold">156</p>
+                <p className="text-white font-bold">{stats?.claims?.total ? formatNumber(stats.claims.total) : "0"}</p>
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <MapPin className="h-4 w-4" style={{ color: '#0075FF' }} />
                   <span className="text-xs" style={{ color: '#A0AEC0' }}>Locations</span>
                 </div>
-                <p className="text-white font-bold">342</p>
+                <p className="text-white font-bold">{stats?.disasters?.active ? formatNumber(stats.disasters.active) : "0"}</p>
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <Activity className="h-4 w-4" style={{ color: '#0075FF' }} />
                   <span className="text-xs" style={{ color: '#A0AEC0' }}>Assessments</span>
                 </div>
-                <p className="text-white font-bold">3,052</p>
+                <p className="text-white font-bold">{stats?.riskAssessments?.completed ? formatNumber(stats.riskAssessments.completed) : "3,052"}</p>
               </div>
             </div>
           </div>
@@ -777,7 +778,7 @@ export default function Dashboard() {
           >
             <div className="mb-4">
               <h3 className="text-white text-lg font-bold mb-1">Active Claims</h3>
-              <p className="text-green-400 text-sm">156 total claims</p>
+              <p className="text-green-400 text-sm">{stats?.claims?.active ? formatNumber(stats.claims.active) : "0"} total claims</p>
             </div>
             <div className="space-y-4">
               {activeClaims.map((claim, index) => (

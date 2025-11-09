@@ -1,5 +1,4 @@
 import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
 
 /**
  * Build prompt for claim decision summarization
@@ -26,15 +25,19 @@ were fused, what the resulting risk level means, and why this decision was made.
 }
 
 /**
- * Summarize claim decision using AI
+ * Summarize claim decision using Anthropic Claude AI
+ * Falls back to template summary if API is unavailable
+ * 
  * @param {Object} claimOutput - Claim decision output
  * @returns {Promise<string>} - Summary text
  */
 export async function summarizeClaimDecision(claimOutput) {
-  // Try Anthropic Claude first (already configured in Node.js backend)
+  // Use Anthropic Claude for AI summary generation
   if (process.env.ANTHROPIC_API_KEY && 
       process.env.ANTHROPIC_API_KEY !== 'your_anthropic_api_key_here') {
     try {
+      console.log('🧠 [SUMMARIZATION] Generating AI summary with Anthropic Claude...');
+      
       const client = new Anthropic({
         apiKey: process.env.ANTHROPIC_API_KEY
       });
@@ -53,46 +56,20 @@ export async function summarizeClaimDecision(claimOutput) {
       });
 
       const summary = response.content[0].text.trim();
+      console.log('   ✅ Anthropic Claude summarization successful');
+      console.log('   📝 Summary:', summary);
       return summary;
     } catch (error) {
-      console.error('Anthropic summarization failed:', error.message);
-      // Fall through to next method
-    }
-  }
-
-  // Try Inception Labs Mercury (OpenAI-compatible)
-  if (process.env.INCEPTION_API_KEY) {
-    try {
-      const client = new OpenAI({
-        apiKey: process.env.INCEPTION_API_KEY,
-        baseURL: 'https://api.inceptionlabs.ai/v1'
-      });
-
-      const prompt = buildPrompt(claimOutput);
-      const response = await client.chat.completions.create({
-        model: 'mercury',
-        messages: [
-          {
-            role: 'system',
-            content: 'You generate concise insurance summaries.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 400,
-        temperature: 0.3
-      });
-
-      return response.choices[0].message.content.trim();
-    } catch (error) {
-      console.error('Inception Labs summarization failed:', error.message);
+      console.error('   ❌ Anthropic summarization failed:', error.message);
+      console.error('   Error details:', error);
       // Fall through to fallback
     }
+  } else {
+    console.log('   ⚠️  Anthropic API key not configured');
   }
 
   // Fallback: Generate a basic summary
+  console.log('🧠 [SUMMARIZATION] Using fallback template summary');
   return generateFallbackSummary(claimOutput);
 }
 
@@ -119,4 +96,3 @@ function generateFallbackSummary(claimOutput) {
     `${claimOutput.reason || 'Standard claim processing procedures were followed.'}`
   );
 }
-

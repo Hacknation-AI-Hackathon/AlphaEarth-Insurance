@@ -71,7 +71,8 @@ Keep it under 200 words, professional tone.`;
       const summary = message.content[0].text;
       console.log('✅ AI summary generated successfully');
       
-      return summary;
+      // Parse the summary into structured format
+      return this.parseSummaryToStructured(summary, disasterData, portfolioMetrics, riskDistribution);
     } catch (error) {
       console.error('Error generating AI summary:', error.message);
       
@@ -156,16 +157,87 @@ Keep it actionable and specific, 150 words max.`;
   }
 
   /**
+   * Parse AI summary text into structured format
+   */
+  parseSummaryToStructured(summaryText, disasterData, portfolioMetrics, riskDistribution) {
+    // Try to extract structured information from the summary
+    const lines = summaryText.split('\n').filter(line => line.trim());
+    
+    // Determine status based on risk distribution
+    let status = 'GREEN';
+    let statusColor = '#22C55E';
+    if (riskDistribution.critical.count > 50 || portfolioMetrics.expectedLoss > 50e6) {
+      status = 'RED';
+      statusColor = '#EF4444';
+    } else if (riskDistribution.critical.count > 10 || portfolioMetrics.expectedLoss > 10e6) {
+      status = 'YELLOW';
+      statusColor = '#EAB308';
+    }
+    
+    // Extract financial exposure info
+    const financialExposure = `Expected loss: $${(portfolioMetrics.expectedLoss / 1e6).toFixed(1)}M. Total properties at risk: ${portfolioMetrics.propertiesAtRisk.toLocaleString()}. Critical risk properties: ${riskDistribution.critical.count}. High risk properties: ${riskDistribution.high.count}.`;
+    
+    // Use first 2 sentences as situation overview
+    const sentences = summaryText.split(/[.!?]+/).filter(s => s.trim());
+    const situationOverview = sentences.slice(0, 2).join('. ').trim() + (sentences.length > 0 ? '.' : '') || 
+      `${disasterData.name} poses significant risk to our insured portfolio in ${disasterData.location}.`;
+    
+    return {
+      situationOverview,
+      financialExposure,
+      immediateActions: [
+        'Deploy field assessment team within 24 hours for ground-truth validation',
+        'Activate emergency claims hotline for policyholders in affected areas',
+        'Review and validate loss models - discrepancy analysis required'
+      ],
+      claimsTeamPreparation: [
+        `Expect ${Math.min(riskDistribution.critical.count + riskDistribution.high.count, 100)}-${Math.min(riskDistribution.critical.count + riskDistribution.high.count + 50, 150)} initial claims within 72 hours`,
+        'Prioritize inspections for high-value properties',
+        'Coordinate with local contractors for rapid damage assessment'
+      ],
+      status,
+      statusColor,
+      rawText: summaryText
+    };
+  }
+
+  /**
    * Fallback summary when AI API is unavailable
    */
   generateFallbackSummary(disasterData, portfolioMetrics, riskDistribution) {
-    return `${disasterData.name} poses significant risk to our insured portfolio. 
+    // Determine status based on risk distribution
+    let status = 'GREEN';
+    let statusColor = '#22C55E';
+    if (riskDistribution.critical.count > 50 || portfolioMetrics.expectedLoss > 50e6) {
+      status = 'RED';
+      statusColor = '#EF4444';
+    } else if (riskDistribution.critical.count > 10 || portfolioMetrics.expectedLoss > 10e6) {
+      status = 'YELLOW';
+      statusColor = '#EAB308';
+    }
     
-Current exposure: ${portfolioMetrics.propertiesAtRisk.toLocaleString()} properties at risk with expected losses of $${(portfolioMetrics.expectedLoss / 1e6).toFixed(1)}M. 
+    const situationOverview = `${disasterData.name} poses significant risk to our insured portfolio in ${disasterData.location}. Current exposure indicates ${portfolioMetrics.propertiesAtRisk.toLocaleString()} properties at risk with expected losses of $${(portfolioMetrics.expectedLoss / 1e6).toFixed(1)}M.`;
     
-${riskDistribution.critical.count} properties in critical risk zones require immediate attention. Claims team should prepare for ${riskDistribution.critical.count + riskDistribution.high.count} potential claims.
+    const percentile99 = portfolioMetrics.percentile99Loss ? ` 99th percentile loss: $${(portfolioMetrics.percentile99Loss / 1e6).toFixed(1)}M.` : '';
+    const financialExposure = `Expected loss: $${(portfolioMetrics.expectedLoss / 1e6).toFixed(1)}M. Total properties at risk: ${portfolioMetrics.propertiesAtRisk.toLocaleString()}. Critical risk properties: ${riskDistribution.critical.count}. High risk properties: ${riskDistribution.high.count}.${percentile99}`;
     
-Recommended actions: Deploy emergency response teams, activate catastrophe claims protocols, and proactively contact policyholders in high-risk zones. Monitor disaster progression every 6 hours and update exposure estimates.`;
+    return {
+      situationOverview,
+      financialExposure,
+      immediateActions: [
+        'Deploy field assessment team within 24 hours for ground-truth validation',
+        'Activate emergency claims hotline for policyholders in affected areas',
+        'Review and validate loss models - discrepancy analysis required'
+      ],
+      claimsTeamPreparation: [
+        `Expect ${Math.min(riskDistribution.critical.count + riskDistribution.high.count, 100)}-${Math.min(riskDistribution.critical.count + riskDistribution.high.count + 50, 150)} initial claims within 72 hours`,
+        'Prioritize inspections for high-value properties',
+        'Coordinate with local contractors for rapid damage assessment'
+      ],
+      status,
+      statusColor,
+      rawText: `${situationOverview} ${financialExposure}`
+    };
   }
 
   /**
