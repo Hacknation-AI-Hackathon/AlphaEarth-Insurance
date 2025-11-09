@@ -1,24 +1,35 @@
-// API client for backend communication
+// Frontend/src/lib/api.ts
+// Complete API client for AlphaEarth backend
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+
+// ============================================
+// TYPE DEFINITIONS
+// ============================================
+
+export interface HealthCheckResponse {
+  status: string;
+  timestamp: string;
+  service: string;
+}
 
 export interface PreprocessingWindow {
-  start: string; // YYYY-MM-DD
-  end: string; // YYYY-MM-DD
+  start: string;
+  end: string;
 }
 
 export interface PreprocessingSchema {
-  aoi: [number, number, number, number]; // [minLon, minLat, maxLon, maxLat]
+  aoi: [number, number, number, number];
   pre: PreprocessingWindow;
   post: PreprocessingWindow;
   satellite?: "sentinel2" | "landsat8" | "landsat9" | "modis";
-  max_cloud?: number; // 0-100
+  max_cloud?: number;
   reducer?: "median" | "mosaic";
 }
 
 export interface HazardDetectionSchema {
   hazard?: "flood" | "wildfire" | "roof";
-  scale?: number; // Nominal EE reducer scale in meters
+  scale?: number;
 }
 
 export interface ClaimDecisionSchema {
@@ -32,115 +43,80 @@ export interface ClaimProcessingRequest {
   claim?: ClaimDecisionSchema;
 }
 
-export interface Confidence {
-  confidence_score: number;
-  label: string;
-}
-
-export interface Validation {
-  cross_sensor: number;
-  meteorology: number;
-  spatial_coherence: number;
-  confidence: Confidence;
-  error?: string;
-}
-
-export interface HazardResult {
-  damage_pct?: number;
-  [key: string]: any;
-}
-
-export interface ClaimResult {
-  fused_score?: number;
-  confidence_label?: string;
-  [key: string]: any;
-}
-
-export interface RankedHazard {
-  hazard: string;
-  fused_score: number;
-  damage_pct?: number;
-  confidence_label?: string;
-}
-
-export interface Visualization {
-  pre_tile: string;
-  post_tile: string;
-  dataset: string;
-  bands: string[];
-  aoi: [number, number, number, number];
-}
-
 export interface ClaimProcessingResponse {
-  hazard: HazardResult;
-  validation: Validation;
-  claim: ClaimResult;
-  ranked_hazards: RankedHazard[];
+  preprocessing: any;
+  hazard: {
+    damage_pct?: number;
+    [key: string]: any;
+  };
+  validation: {
+    cross_sensor: number;
+    meteorology: number;
+    spatial_coherence: number;
+    confidence: {
+      confidence_score: number;
+      label: string;
+    };
+    [key: string]: any;
+  };
+  claim: any;
   summary?: string;
-  visualization?: Visualization;
+  ranked_hazards?: Array<{
+    hazard: string;
+    fused_score: number;
+    confidence_label: string;
+  }>;
 }
 
-export interface HealthCheckResponse {
-  status: string;
-  service: string;
-}
-
-// Flight Delay Types
 export interface FlightDelayRequest {
   origin_code: string;
-  origin_coords: [number, number]; // [longitude, latitude]
+  origin_coords: [number, number];
   dest_code: string;
-  dest_coords: [number, number]; // [longitude, latitude]
-  departure_date: string; // YYYY-MM-DD
-  departure_time?: string; // HH:MM
-  flight_duration_hours?: number;
-}
-
-export interface WeatherData {
-  precipitation_mm: number;
-  wind_speed_mph: number;
-  has_storm: boolean;
-  error?: string;
-}
-
-export interface RouteWeather {
-  route_precipitation_mm: number;
-  max_precipitation_mm: number;
-  has_storm_along_route: boolean;
-  route_length_km?: number;
-  error?: string;
-}
-
-export interface DelayFactors {
-  origin_storm: boolean;
-  dest_storm: boolean;
-  route_storm: boolean;
-  origin_precip: number;
-  dest_precip: number;
-  origin_wind: number;
-  dest_wind: number;
-  origin_congestion: number;
-  dest_congestion: number;
+  dest_coords: [number, number];
+  departure_date: string;
+  departure_time: string;
+  flight_duration_hours: number;
+  departure_airport?: string;  // ADD this
+  arrival_airport?: string;    // ADD this
+  scheduled_departure?: string; // ADD this
+  carrier?: string;            // ADD this
+  flight_number?: string;      // ADD this
 }
 
 export interface FlightDelayResponse {
   delay_probability: number;
-  severity: "low" | "medium" | "high" | "unknown";
+  expected_delay_minutes: number;
+  risk_factors: any;
+  payout_eligible: boolean;
   payout_amount: number;
   should_payout: boolean;
+  severity: string;
   delay_reason: string;
-  factors: DelayFactors;
   weather: {
-    origin: WeatherData;
-    destination: WeatherData;
-    route: RouteWeather;
+    origin: {
+      precipitation_mm: number;
+      wind_speed_mph: number;
+      has_storm: boolean;
+    };
+    destination: {
+      precipitation_mm: number;
+      wind_speed_mph: number;
+      has_storm: boolean;
+    };
+    route: {
+      route_precipitation_mm: number;
+      has_storm_along_route: boolean;
+    };
   };
   congestion: {
     origin: number;
     destination: number;
   };
-  error?: string;
 }
+
+// ============================================
+// API CLIENT CLASS
+// ============================================
 
 class ApiClient {
   private baseUrl: string;
@@ -152,12 +128,10 @@ class ApiClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
-    timeoutMinutes: number = 5 // Default timeout for most requests
+    timeoutMinutes: number = 5
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     
-    // Create AbortController for timeout
-    // For long-running requests like claim processing, use 45 minutes (buffer for 30 min processing)
     const controller = new AbortController();
     const timeoutMs = timeoutMinutes * 60 * 1000;
     const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -172,29 +146,20 @@ class ApiClient {
     };
 
     try {
-      console.log(`🌐 Making request to: ${url}`, {
-        method: options.method || 'GET',
-        timeout: timeoutMinutes,
-        timestamp: new Date().toISOString(),
-      });
+      console.log(`🌐 API Request: ${options.method || 'GET'} ${url}`);
       
       const response = await fetch(url, config);
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
       
-      console.log(`📥 Received response: ${response.status} ${response.statusText}`, {
-        ok: response.ok,
-        contentType: response.headers.get('content-type'),
-        timestamp: new Date().toISOString(),
-      });
+      console.log(`📥 API Response: ${response.status} ${response.statusText}`);
       
       if (!response.ok) {
         let errorMessage = `Server error (${response.status})`;
         
-        // Handle proxy errors that indicate backend is down
         if (response.status === 502 || response.status === 503) {
-          errorMessage = "Backend is unavailable. Please ensure the server is running on port 8000.";
+          errorMessage = "Backend is unavailable. Please ensure the server is running on port 5000.";
           const error = new Error(errorMessage);
           (error as any).status = response.status;
           throw error;
@@ -203,182 +168,444 @@ class ApiClient {
         try {
           const errorData = await response.json();
           errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
-          
-          // Provide more helpful error messages
-          if (response.status === 500) {
-            // Check if it's a specific backend error
-            if (errorData.detail && typeof errorData.detail === 'string') {
-              // If the error contains specific info, use it
-              if (errorData.detail.includes('Earth Engine') || errorData.detail.includes('GEE')) {
-                errorMessage = "Earth Engine error: " + errorData.detail;
-              } else if (errorData.detail.includes('timeout') || errorData.detail.includes('Timeout')) {
-                errorMessage = "Processing timeout: The request took too long. Please try with a smaller area or different dates.";
-              } else {
-                errorMessage = "Server error: " + errorData.detail;
-              }
-            } else {
-              errorMessage = "Server error: The backend is experiencing issues. Please try again in a moment.";
-            }
-          } else if (response.status === 400) {
-            errorMessage = errorData.detail || "Invalid request. Please check your input and try again.";
-          } else if (response.status === 404) {
-            errorMessage = "Endpoint not found. Please contact support.";
-          }
-        } catch (parseError) {
-          // If JSON parsing fails, use status-based message
-          console.error("❌ Failed to parse error response:", parseError);
-          if (response.status === 500) {
-            errorMessage = "Server error: The backend is experiencing issues. Please try again in a moment.";
-          } else if (response.status === 502 || response.status === 503) {
-            errorMessage = "Backend is unavailable. Please ensure the server is running on port 8000.";
-          }
+        } catch {
+          // Couldn't parse error JSON
         }
         
         const error = new Error(errorMessage);
         (error as any).status = response.status;
         throw error;
       }
-
-      // Parse JSON response with better error handling
-      try {
-        const jsonData = await response.json();
-        console.log(`✅ Successfully parsed response`, {
-          keys: Object.keys(jsonData),
-          timestamp: new Date().toISOString(),
-        });
-        return jsonData;
-      } catch (parseError) {
-        console.error("❌ Failed to parse JSON response:", parseError);
-        throw new Error("Failed to parse server response. The response may be malformed or too large.");
-      }
-    } catch (error) {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      
+      return await response.json();
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${timeoutMinutes} minutes`);
       }
       
-      console.error("❌ Request failed:", error);
-      
-      // Handle abort (timeout)
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.error("⏱️ Request timeout after", timeoutMinutes, "minutes");
-        throw new Error("Request timeout: The processing is taking longer than expected. Please try again or contact support.");
-      }
-      
-      // Handle network errors (backend is down or unreachable)
       if (error instanceof Error && (
         error.message.includes('Failed to fetch') || 
-        error.message.includes('NetworkError') ||
-        error.message.includes('Network request failed') ||
-        error.name === 'TypeError' && error.message.includes('fetch')
+        error.message.includes('NetworkError')
       )) {
-        console.error("🌐 Network error detected - backend is likely down");
-        throw new Error("Network error: Unable to connect to the server. The backend may be down.");
+        throw new Error("Network error: Unable to connect to the server.");
       }
       
-      // Handle CORS errors
-      if (error instanceof Error && error.message.includes('CORS')) {
-        console.error("🚫 CORS error detected");
-        throw new Error("CORS error: The server is not allowing requests from this origin. Please contact support.");
-      }
-      
-      // Re-throw known errors
-      if (error instanceof Error) {
-        throw error;
-      }
-      
-      // Unknown error
-      console.error("❓ Unknown error type:", typeof error, error);
-      throw new Error("An unknown error occurred");
+      throw error;
     }
   }
 
+  // ============================================
+  // HEALTH & STATUS
+  // ============================================
+
   async healthCheck(): Promise<HealthCheckResponse> {
-    // Health check should be quick - 5 second timeout
     try {
-      return await this.request<HealthCheckResponse>("/health", {}, 0.083); // 5 seconds
+      return await this.request<HealthCheckResponse>("/health", {}, 0.083);
     } catch (error) {
-      // If health check fails, throw a clear error
-      // This ensures React Query knows the backend is down
       console.error("Health check failed:", error);
       throw new Error("Backend is unavailable");
     }
   }
 
-  async processClaim(
-    request: ClaimProcessingRequest
-  ): Promise<ClaimProcessingResponse> {
-    // Claim processing can take up to 30 minutes, so set timeout to 60 minutes for safety
-    // Log the request for debugging
-    console.log("🔄 Starting claim processing request...", {
-      aoi: request.preprocessing.aoi,
-      hazard: request.hazard?.hazard || "auto-detect",
-      timestamp: new Date().toISOString(),
+  // ============================================
+  // DISASTERS
+  // ============================================
+
+  async getActiveDisasters() {
+    return await this.request<any>("/disasters/active");
+  }
+
+  async getHurricanes() {
+    return await this.request<any>("/disasters/hurricanes");
+  }
+
+  async getHurricaneById(hurricaneId: string) {
+    return await this.request<any>(`/disasters/hurricanes/${hurricaneId}`);
+  }
+
+  async getWildfires() {
+    return await this.request<any>("/disasters/wildfires");
+  }
+
+  async getWildfireById(wildfireId: string) {
+    return await this.request<any>(`/disasters/wildfires/${wildfireId}`);
+  }
+
+  // ============================================
+  // EARTHQUAKES
+  // ============================================
+
+  async getActiveEarthquakes(params?: { magnitude?: number; timeframe?: string }) {
+    const queryString = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return await this.request<any>(`/earthquakes/active${queryString}`);
+  }
+
+  async getSignificantEarthquakes() {
+    return await this.request<any>("/earthquakes/significant");
+  }
+
+  // ============================================
+  // SEVERE WEATHER
+  // ============================================
+
+  async getActiveSevereWeather() {
+    return await this.request<any>("/severe-weather/active");
+  }
+
+  async getTornadoWarnings() {
+    return await this.request<any>("/severe-weather/tornadoes");
+  }
+
+  async getFloodWarnings() {
+    return await this.request<any>("/severe-weather/floods");
+  }
+
+  async getAlertsByState(states: string[]) {
+    return await this.request<any>(`/severe-weather/by-state/${states.join(',')}`);
+  }
+
+  // ============================================
+  // ANALYSIS
+  // ============================================
+
+  async analyzeHurricane(stormId: string, region: string, numProperties: number) {
+    return await this.request<any>("/analysis/hurricane", {
+      method: "POST",
+      body: JSON.stringify({ stormId, region, numProperties }),
+    }, 3);
+  }
+
+  async analyzeWildfire(fireId: string, region: string, numProperties: number) {
+    return await this.request<any>("/analysis/wildfire", {
+      method: "POST",
+      body: JSON.stringify({ fireId, region, numProperties }),
+    }, 3);
+  }
+
+  async analyzeScenario(data: {
+    disasterType: string;
+    disasterId: string;
+    scenarioModifier: string;
+    region: string;
+  }) {
+    return await this.request<any>("/analysis/scenario", {
+      method: "POST",
+      body: JSON.stringify(data),
     });
+  }
+
+  async calculatePropertyRisk(data: {
+    propertyId: string;
+    riskAssessment: any;
+  }) {
+    return await this.request<any>("/analysis/property-risk", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }, 1);
+  }
+
+  // ============================================
+  // PROPERTIES
+  // ============================================
+
+  async getPropertyPortfolio(params?: { region?: string; count?: number }) {
+    const queryString = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return await this.request<any>(`/properties/portfolio${queryString}`);
+  }
+
+  async getPropertiesInRegion(lat: number, lon: number, radius: number) {
+    return await this.request<any>(`/properties/region?lat=${lat}&lon=${lon}&radius=${radius}`, {}, 3);
+  }
+
+  async getHighValueProperties(params?: { minValue?: number; threshold?: number; region?: string }) {
+    const queryString = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return await this.request<any>(`/properties/high-value${queryString}`, {}, 2);
+  }
+
+  async getCoastalProperties(params?: { maxDistance?: number; region?: string }) {
+    const queryString = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return await this.request<any>(`/properties/coastal${queryString}`, {}, 2);
+  }
+
+  // ============================================
+  // RISK ASSESSMENT
+  // ============================================
+
+  async runMonteCarloSimulation(data: {
+    riskAssessments: Array<{
+      propertyId: string;
+      coverageAmount: number;
+      damageProbability: number;
+    }>;
+    numSimulations: number;
+  }) {
+    return await this.request<any>("/risk/monte-carlo", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPortfolioMetrics(data: {
+    riskAssessments: Array<{
+      propertyId: string;
+      coverageAmount: number;
+      damageProbability: number;
+      expectedLoss: number;
+      riskTier: string;
+    }>;
+  }) {
+    return await this.request<any>("/risk/portfolio-metrics", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ============================================
+  // SATELLITE IMAGERY
+  // ============================================
+
+  async getImagery(data: {
+    aoi: [number, number, number, number];
+    date: string;
+    source: string;
+  }) {
+    return await this.request<any>("/imagery/get", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPrePostImagery(data: {
+    aoi: [number, number, number, number];
+    disasterDate: string;
+    preDays: number;
+    postDays: number;
+    source: string;
+  }) {
+    return await this.request<any>("/imagery/pre-post", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getDisasterImpactImagery(data: {
+    disasterType: string;
+    coordinates: { lat: number; lon: number };
+    disasterDate: string;
+    source: string;
+  }) {
+    return await this.request<any>("/imagery/disaster-impact", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAvailableImageryDates(days: number = 30) {
+    return await this.request<any>(`/imagery/available-dates?days=${days}`);
+  }
+
+  async getImagerySources() {
+    return await this.request<any>("/imagery/sources");
+  }
+
+  // ============================================
+  // PARAMETRIC INSURANCE
+  // ============================================
+
+  async getParametricPolicies() {
+    return await this.request<any>("/parametric/policies");
+  }
+
+  async getParametricPolicyById(policyId: string) {
+    return await this.request<any>(`/parametric/policies/${policyId}`);
+  }
+
+  async createParametricPolicy(data: {
+    propertyId: string;
+    holder: { name: string; email: string };
+    location: { lat: number; lon: number; address: string };
+    coverage: { amount: number; currency: string; type: string };
+    triggers: Array<{
+      type: string;
+      threshold: number;
+      payout: number;
+      description: string;
+    }>;
+  }) {
+    return await this.request<any>("/parametric/policies", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async evaluatePolicy(policyId: string) {
+    return await this.request<any>(`/parametric/evaluate/${policyId}`, {
+      method: "POST",
+      body: JSON.stringify({
+        eventContext: {
+          eventName: "Manual Trigger Evaluation",
+          timestamp: new Date().toISOString(),
+        }
+      }),
+    }, 3);
+  }
+
+  async getPendingParametricPayouts() {
+    return await this.request<any>("/parametric/payouts/pending");
+  }
+
+  async getProcessedParametricPayouts() {
+    return await this.request<any>("/parametric/payouts/processed");
+  }
+
+  async getParametricPayoutById(payoutId: string) {
+    return await this.request<any>(`/parametric/payouts/${payoutId}`);
+  }
+
+  async approveParametricPayout(payoutId: string, adminEmail: string, adminPassword: string) {
+    return await this.request<any>(`/parametric/payouts/${payoutId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ adminEmail, adminPassword }),
+    });
+  }
+
+  async rejectParametricPayout(payoutId: string, adminEmail: string, adminPassword: string, reason: string) {
+    return await this.request<any>(`/parametric/payouts/${payoutId}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ adminEmail, adminPassword, reason }),
+    });
+  }
+
+  async getParametricStatistics() {
+    return await this.request<any>("/parametric/statistics");
+  }
+
+  async createTestPolicy() {
+    return await this.request<any>("/parametric/create-test-policy", {
+      method: "POST",
+    });
+  }
+
+  // ============================================
+  // FLIGHT INSURANCE
+  // ============================================
+
+  async getAirportDelays() {
+    return await this.request<any>("/flight/delays", {}, 2);
+  }
+
+  async getAirportDelayByCode(airportCode: string) {
+    return await this.request<any>(`/flight/delays/${airportCode}`);
+  }
+
+  async getFlightPolicies() {
+    return await this.request<any>("/flight/policies");
+  }
+
+  async getFlightPolicyById(policyId: string) {
+    return await this.request<any>(`/flight/policies/${policyId}`);
+  }
+
+  async createFlightPolicy(data: {
+    holder: { name: string; email: string; confirmationNumber: string };
+    flight: {
+      number: string;
+      airline: string;
+      from: string;
+      to: string;
+      departureTime: string;
+    };
+    coverage: { amount: number; currency: string; type: string };
+    triggers: Array<{
+      type: string;
+      threshold: number;
+      payout: number;
+      description: string;
+    }>;
+  }) {
+    return await this.request<any>("/flight/policies", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async evaluateAllFlightPolicies() {
+    return await this.request<any>("/flight/evaluate", {
+      method: "POST",
+    });
+  }
+
+  async evaluateFlightPolicy(policyId: string) {
+    return await this.request<any>(`/flight/evaluate/${policyId}`, {
+      method: "POST",
+    });
+  }
+
+  async getPendingFlightPayouts() {
+    return await this.request<any>("/flight/payouts/pending");
+  }
+
+  async getProcessedFlightPayouts() {
+    return await this.request<any>("/flight/payouts/processed");
+  }
+
+  async getFlightPayoutById(payoutId: string) {
+    return await this.request<any>(`/flight/payouts/${payoutId}`);
+  }
+
+  async approveFlightPayout(payoutId: string, adminEmail: string, adminPassword: string) {
+    return await this.request<any>(`/flight/payouts/${payoutId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ adminEmail, adminPassword }),
+    });
+  }
+
+  async rejectFlightPayout(payoutId: string, adminEmail: string, adminPassword: string, reason: string) {
+    return await this.request<any>(`/flight/payouts/${payoutId}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ adminEmail, adminPassword, reason }),
+    });
+  }
+
+  async getFlightStatistics() {
+    return await this.request<any>("/flight/statistics");
+  }
+
+  // ============================================
+  // CLAIM PROCESSING (EXISTING)
+  // ============================================
+
+  async processClaim(request: ClaimProcessingRequest): Promise<ClaimProcessingResponse> {
+    console.log("📄 Starting claim processing request...");
     
     try {
       const startTime = Date.now();
-      const result = await this.request<ClaimProcessingResponse>("/claim_processing_basic", {
+      const result = await this.request<ClaimProcessingResponse>("/claim_processing/basic", {
         method: "POST",
         body: JSON.stringify(request),
-      }, 60); // 60 minutes timeout (matching backend and proxy timeouts)
+      }, 60);
       
       const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(2);
-      console.log("✅ Claim processing completed successfully", {
-        duration: `${duration} minutes`,
-        timestamp: new Date().toISOString(),
-        hasHazard: !!result.hazard,
-        hasValidation: !!result.validation,
-        hasClaim: !!result.claim,
-      });
+      console.log(`✅ Claim processing completed in ${duration} minutes`);
       
       return result;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("❌ Claim processing failed:", {
-        error: errorMessage,
-        errorType: error instanceof Error ? error.constructor.name : typeof error,
-        timestamp: new Date().toISOString(),
-      });
+      console.error("❌ Claim processing failed:", error);
       throw error;
     }
   }
 
-  async analyzeFlightDelay(
-    request: FlightDelayRequest
-  ): Promise<FlightDelayResponse> {
-    // Flight delay analysis should be relatively quick (1-2 minutes)
-    console.log("🔄 Starting flight delay analysis...", {
-      route: `${request.origin_code} -> ${request.dest_code}`,
-      date: request.departure_date,
-      timestamp: new Date().toISOString(),
+  // ============================================
+  // FLIGHT DELAY ANALYSIS (EXISTING - kept for compatibility)
+  // ============================================
+
+  async analyzeFlightDelay(request: FlightDelayRequest): Promise<FlightDelayResponse> {
+    return await this.request<FlightDelayResponse>("/analyze_flight_delay", {
+      method: "POST",
+      body: JSON.stringify(request),
     });
-    
-    try {
-      const startTime = Date.now();
-      const result = await this.request<FlightDelayResponse>("/flight_delay_analysis", {
-        method: "POST",
-        body: JSON.stringify(request),
-      }, 5); // 5 minutes timeout
-      
-      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.log("✅ Flight delay analysis completed successfully", {
-        duration: `${duration} seconds`,
-        delayProbability: result.delay_probability,
-        payoutAmount: result.payout_amount,
-        timestamp: new Date().toISOString(),
-      });
-      
-      return result;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("❌ Flight delay analysis failed:", {
-        error: errorMessage,
-        errorType: error instanceof Error ? error.constructor.name : typeof error,
-        timestamp: new Date().toISOString(),
-      });
-      throw error;
-    }
   }
 }
 
+// Export singleton instance
 export const apiClient = new ApiClient();

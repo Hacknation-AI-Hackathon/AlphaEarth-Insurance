@@ -9,6 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useParametricPolicies, usePendingParametricPayouts, useEvaluatePolicy, useCreateTestPolicy, useParametricStatistics } from "@/hooks/useParametric";
+import { useToast } from "@/hooks/use-toast";
 
 const payoutHistory = [
   {
@@ -46,6 +48,56 @@ const payoutHistory = [
 ];
 
 export default function Parametric() {
+
+  // Fetch real parametric data from backend
+  const { data: policiesData, isLoading: policiesLoading } = useParametricPolicies();
+  const { data: payoutsData, isLoading: payoutsLoading } = usePendingParametricPayouts();
+  const { data: statsData, isLoading: statsLoading } = useParametricStatistics();
+  const evaluatePolicy = useEvaluatePolicy();
+  const createTestPolicy = useCreateTestPolicy();
+  const { toast } = useToast();
+
+  // Log data to console
+  console.log("Parametric Data:", {
+    policies: policiesData?.policies || [],
+    payouts: payoutsData?.payouts || [],
+    stats: statsData?.statistics || {}
+  });
+
+  // Handle evaluate policy
+  const handleEvaluate = async (policyId: string) => {
+    try {
+      await evaluatePolicy.mutateAsync(policyId);
+      toast({
+        title: "Policy Evaluated",
+        description: "Triggers evaluated successfully! Check payouts for results.",
+      });
+    } catch (error) {
+      toast({
+        title: "Evaluation Failed",
+        description: error instanceof Error ? error.message : "Failed to evaluate policy",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle create test policy
+  const handleCreateTestPolicy = async () => {
+    try {
+      await createTestPolicy.mutateAsync();
+      toast({
+        title: "Test Policy Created",
+        description: "Test policy with low wind thresholds created successfully!",
+      });
+    } catch (error) {
+      toast({
+        title: "Creation Failed",
+        description: error instanceof Error ? error.message : "Failed to create test policy",
+        variant: "destructive",
+      });
+    }
+  };
+  
   return (
     <div className="space-y-6" style={{ background: 'transparent', minHeight: '100vh' }}>
       {/* Header */}

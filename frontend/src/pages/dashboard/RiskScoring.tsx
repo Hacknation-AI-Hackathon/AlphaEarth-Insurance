@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { RiskMap } from "@/components/RiskMap";
 import { useToast } from "@/hooks/use-toast";
+import { usePropertiesInRegion, useHighValueProperties, useCalculatePropertyRisk, useMonteCarloSimulation } from "@/hooks/useProperties";
+import { useActiveDisasters, useHurricanes, useWildfires } from "@/hooks/useDisasters";
 
 interface CityData {
   name: string;
@@ -80,6 +82,38 @@ export default function RiskScoring() {
   const [searchInput, setSearchInput] = useState("");
   const [animateScores, setAnimateScores] = useState(false);
   const { toast } = useToast();
+
+  // Fetch real property data from backend
+  const { data: propertiesData, isLoading: propertiesLoading } = usePropertiesInRegion(
+    selectedCity.coords[0], 
+    selectedCity.coords[1], 
+    50 // 50km radius
+  );
+  
+  const { data: highValueData, isLoading: highValueLoading } = useHighValueProperties({ 
+    minValue: 500000 
+  });
+
+  const { data: disastersData } = useActiveDisasters();
+  const { data: hurricanesData } = useHurricanes();
+  const { data: wildfiresData } = useWildfires();
+  
+  const calculateRisk = useCalculatePropertyRisk();
+  const runMonteCarlo = useMonteCarloSimulation();
+
+  // Log real data to console
+  console.log("Risk Scoring Data:", {
+    properties: propertiesData?.data || [],
+    highValue: highValueData?.data || [],
+    disasters: disastersData?.data || [],
+    hurricanes: hurricanesData?.data || [],
+    wildfires: wildfiresData?.data || []
+  });
+
+  // Calculate real risk metrics from backend data
+  const realPropertyCount = propertiesData?.count || 0;
+  const realHighValueCount = highValueData?.count || 0;
+  const realDisasterCount = disastersData?.count || 0;
 
   const handleCitySelect = (cityName: string) => {
     setIsLoading(true);

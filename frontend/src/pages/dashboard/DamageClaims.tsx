@@ -220,7 +220,7 @@ export default function DamageClaims() {
       if (!isHealthy) {
         addNotification({
           title: "Backend Unavailable",
-          description: "Unable to connect to the backend server. Please ensure the server is running on port 8000.",
+          description: "Unable to connect to the backend server. Please ensure the server is running on port 5000.",
           type: "error",
         });
         return;
