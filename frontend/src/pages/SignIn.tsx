@@ -160,30 +160,6 @@ const SignInPage = () => {
             }}>FEATURES</div>
           </div>
           
-          {/* DEMO */}
-          <div 
-            onClick={() => navigate('/demo')}
-            style={{
-              padding: '4px 8px',
-              borderRadius: 12,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              transition: 'background-color 0.2s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            <div style={{ 
-              color: 'white', 
-              fontSize: 'clamp(9px, 0.8vw, 12px)', 
-              fontWeight: 400,
-              letterSpacing: '2.52px',
-              fontFamily: 'Plus Jakarta Display, -apple-system, BlinkMacSystemFont, sans-serif',
-              whiteSpace: 'nowrap'
-            }}>DEMO</div>
-          </div>
-          
           {/* SIGN IN */}
           <div style={{
             padding: '4px 8px',

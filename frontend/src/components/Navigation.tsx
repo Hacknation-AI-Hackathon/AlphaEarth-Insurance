@@ -32,13 +32,6 @@ export const Navigation = () => {
               Features
             </a>
             <NavLink 
-              to="/demo" 
-              className="text-foreground hover:text-primary transition-colors"
-              activeClassName="text-primary font-medium"
-            >
-              Demo
-            </NavLink>
-            <NavLink 
               to="/signin" 
               className="text-foreground hover:text-primary transition-colors"
               activeClassName="text-primary font-medium"

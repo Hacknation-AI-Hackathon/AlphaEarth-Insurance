@@ -6,7 +6,8 @@
 const getApiBaseUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl) {
-    return envUrl;
+    // Remove trailing slash to avoid double slashes
+    return envUrl.replace(/\/+$/, '');
   }
   // Default to relative path for same-domain API calls
   return "/api";
@@ -141,7 +142,10 @@ class ApiClient {
     options: RequestInit = {},
     timeoutMinutes: number = 5
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    // Ensure proper URL construction - avoid double slashes
+    const base = this.baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${base}${path}`;
     
     const controller = new AbortController();
     const timeoutMs = timeoutMinutes * 60 * 1000;
