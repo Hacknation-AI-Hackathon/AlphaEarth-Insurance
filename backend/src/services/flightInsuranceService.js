@@ -21,7 +21,9 @@ class FlightInsuranceService {
    * Create demo flight insurance policies
    */
   createDemoPolicies() {
+    // Get airports with diverse locations for testing
     const demoPolicies = [
+      // Policy 1 - Low threshold for testing (will trigger with minor delays)
       {
         id: 'FLIGHT-POLICY-001',
         holder: {
@@ -37,39 +39,40 @@ class FlightInsuranceService {
           departureTime: '2025-11-09T10:00:00Z'
         },
         coverage: {
-          amount: 500,
+          amount: 300,
           currency: 'USD',
           type: 'Flight Delay Micro-Insurance'
         },
         triggers: [
           {
             type: 'delay',
-            threshold: 30, // 30 minutes
-            payout: 50,
-            description: '30+ minute delay'
+            threshold: 5, // Very low - will trigger with any minor delay
+            payout: 25,
+            description: 'Minor delay (5+ min)'
           },
           {
             type: 'delay',
-            threshold: 60, // 1 hour
+            threshold: 15,
+            payout: 75,
+            description: 'Moderate delay (15+ min)'
+          },
+          {
+            type: 'delay',
+            threshold: 30,
             payout: 150,
-            description: '1+ hour delay'
+            description: 'Significant delay (30+ min)'
           },
           {
             type: 'delay',
-            threshold: 120, // 2 hours
+            threshold: 60,
             payout: 300,
-            description: '2+ hour delay'
-          },
-          {
-            type: 'delay',
-            threshold: 180, // 3 hours
-            payout: 500,
-            description: '3+ hour delay'
+            description: 'Major delay (1+ hour)'
           }
         ],
         active: true,
         createdAt: new Date().toISOString()
       },
+      // Policy 2 - Atlanta departure
       {
         id: 'FLIGHT-POLICY-002',
         holder: {
@@ -85,28 +88,157 @@ class FlightInsuranceService {
           departureTime: '2025-11-09T14:30:00Z'
         },
         coverage: {
-          amount: 400,
+          amount: 250,
           currency: 'USD',
           type: 'Flight Delay Micro-Insurance'
         },
         triggers: [
           {
             type: 'delay',
-            threshold: 45,
+            threshold: 5,
+            payout: 20,
+            description: 'Minor delay (5+ min)'
+          },
+          {
+            type: 'delay',
+            threshold: 20,
             payout: 100,
-            description: '45+ minute delay'
+            description: 'Moderate delay (20+ min)'
+          },
+          {
+            type: 'delay',
+            threshold: 45,
+            payout: 250,
+            description: 'Major delay (45+ min)'
+          }
+        ],
+        active: true,
+        createdAt: new Date().toISOString()
+      },
+      // Policy 3 - Chicago departure (high congestion airport)
+      {
+        id: 'FLIGHT-POLICY-003',
+        holder: {
+          name: 'Mike Chen',
+          email: 'mike.chen@example.com',
+          confirmationNumber: 'GHI789'
+        },
+        flight: {
+          number: 'UA890',
+          airline: 'United',
+          from: 'ORD',
+          to: 'DEN',
+          departureTime: '2025-11-09T08:00:00Z'
+        },
+        coverage: {
+          amount: 200,
+          currency: 'USD',
+          type: 'Flight Delay Micro-Insurance'
+        },
+        triggers: [
+          {
+            type: 'delay',
+            threshold: 5,
+            payout: 15,
+            description: 'Minor delay (5+ min)'
+          },
+          {
+            type: 'delay',
+            threshold: 25,
+            payout: 100,
+            description: 'Moderate delay (25+ min)'
+          },
+          {
+            type: 'delay',
+            threshold: 60,
+            payout: 200,
+            description: 'Major delay (1+ hour)'
+          }
+        ],
+        active: true,
+        createdAt: new Date().toISOString()
+      },
+      // Policy 4 - Denver departure (weather-prone)
+      {
+        id: 'FLIGHT-POLICY-004',
+        holder: {
+          name: 'Emily Rodriguez',
+          email: 'emily.r@example.com',
+          confirmationNumber: 'JKL012'
+        },
+        flight: {
+          number: 'WN456',
+          airline: 'Southwest',
+          from: 'DEN',
+          to: 'PHX',
+          departureTime: '2025-11-09T11:30:00Z'
+        },
+        coverage: {
+          amount: 180,
+          currency: 'USD',
+          type: 'Flight Delay Micro-Insurance'
+        },
+        triggers: [
+          {
+            type: 'delay',
+            threshold: 5,
+            payout: 20,
+            description: 'Minor delay (5+ min)'
+          },
+          {
+            type: 'delay',
+            threshold: 30,
+            payout: 90,
+            description: 'Moderate delay (30+ min)'
           },
           {
             type: 'delay',
             threshold: 90,
-            payout: 250,
-            description: '90+ minute delay'
+            payout: 180,
+            description: 'Major delay (90+ min)'
+          }
+        ],
+        active: true,
+        createdAt: new Date().toISOString()
+      },
+      // Policy 5 - Miami departure (hurricane risk)
+      {
+        id: 'FLIGHT-POLICY-005',
+        holder: {
+          name: 'David Park',
+          email: 'david.park@example.com',
+          confirmationNumber: 'MNO345'
+        },
+        flight: {
+          number: 'AA789',
+          airline: 'American',
+          from: 'MIA',
+          to: 'BOS',
+          departureTime: '2025-11-09T15:00:00Z'
+        },
+        coverage: {
+          amount: 350,
+          currency: 'USD',
+          type: 'Flight Delay Micro-Insurance'
+        },
+        triggers: [
+          {
+            type: 'delay',
+            threshold: 5,
+            payout: 30,
+            description: 'Minor delay (5+ min)'
           },
           {
             type: 'delay',
-            threshold: 180,
-            payout: 400,
-            description: '3+ hour delay'
+            threshold: 20,
+            payout: 120,
+            description: 'Moderate delay (20+ min)'
+          },
+          {
+            type: 'delay',
+            threshold: 60,
+            payout: 350,
+            description: 'Major delay (1+ hour)'
           }
         ],
         active: true,
