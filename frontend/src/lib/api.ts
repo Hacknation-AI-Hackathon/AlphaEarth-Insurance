@@ -637,6 +637,14 @@ class ApiClient {
   async getDemoLocations() {
     return await this.request<any>("/demo/locations");
   }
+
+  // ============================================
+  // DASHBOARD STATISTICS
+  // ============================================
+
+  async getDashboardStatistics() {
+    return await this.request<any>("/dashboard/statistics");
+  }
 }
 
 // Export singleton instance

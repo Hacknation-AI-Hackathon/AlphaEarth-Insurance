@@ -9,6 +9,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { CaptionProps } from "react-day-picker";
 
 interface DatePickerProps {
   value: string; // YYYY-MM-DD format
@@ -16,6 +24,125 @@ interface DatePickerProps {
   placeholder?: string;
   className?: string;
   style?: React.CSSProperties;
+}
+
+// Custom Caption component with month/year dropdowns
+interface CustomCaptionProps extends CaptionProps {
+  onMonthSelect?: (date: Date) => void;
+}
+
+function CustomCaption({ displayMonth, onMonthChange, onMonthSelect }: CustomCaptionProps) {
+  const currentYear = displayMonth.getFullYear();
+  const currentMonth = displayMonth.getMonth();
+  
+  // Generate array of months
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  
+  // Generate array of years (from 1900 to current year + 10)
+  const currentYearNum = new Date().getFullYear();
+  const years = Array.from({ length: currentYearNum + 10 - 1900 + 1 }, (_, i) => 1900 + i).reverse();
+  
+  const handleMonthChange = (monthIndex: string) => {
+    const newDate = new Date(currentYear, parseInt(monthIndex), 1);
+    // Call the direct callback first to update state immediately
+    if (onMonthSelect) {
+      onMonthSelect(newDate);
+    }
+    // Also call react-day-picker's callback
+    if (onMonthChange) {
+      onMonthChange(newDate);
+    }
+  };
+  
+  const handleYearChange = (year: string) => {
+    const newDate = new Date(parseInt(year), currentMonth, 1);
+    // Call the direct callback first to update state immediately
+    if (onMonthSelect) {
+      onMonthSelect(newDate);
+    }
+    // Also call react-day-picker's callback
+    if (onMonthChange) {
+      onMonthChange(newDate);
+    }
+  };
+  
+  return (
+    <div className="flex justify-center items-center gap-2 pt-1">
+      <Select
+        value={currentMonth.toString()}
+        onValueChange={handleMonthChange}
+      >
+        <SelectTrigger 
+          className="h-7 w-[120px] text-sm font-medium text-white bg-transparent border-white/20 hover:border-white/40"
+          style={{
+            background: "transparent",
+            borderColor: "rgba(255, 255, 255, 0.2)",
+            color: "white",
+          }}
+        >
+          <SelectValue>{months[currentMonth]}</SelectValue>
+        </SelectTrigger>
+        <SelectContent 
+          className="bg-[#1A1F37] border-white/10"
+          style={{
+            background: "rgba(26, 31, 55, 0.95)",
+            borderColor: "rgba(255, 255, 255, 0.1)",
+            color: "white",
+          }}
+        >
+          {months.map((month, index) => (
+            <SelectItem 
+              key={month} 
+              value={index.toString()}
+              className="text-white focus:bg-white/20 focus:text-white"
+              style={{ color: "white" }}
+            >
+              {month}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      
+      <Select
+        value={currentYear.toString()}
+        onValueChange={handleYearChange}
+      >
+        <SelectTrigger 
+          className="h-7 w-[80px] text-sm font-medium text-white bg-transparent border-white/20 hover:border-white/40"
+          style={{
+            background: "transparent",
+            borderColor: "rgba(255, 255, 255, 0.2)",
+            color: "white",
+          }}
+        >
+          <SelectValue>{currentYear}</SelectValue>
+        </SelectTrigger>
+        <SelectContent 
+          className="bg-[#1A1F37] border-white/10"
+          style={{
+            background: "rgba(26, 31, 55, 0.95)",
+            borderColor: "rgba(255, 255, 255, 0.1)",
+            color: "white",
+            maxHeight: "200px",
+          }}
+        >
+          {years.map((year) => (
+            <SelectItem 
+              key={year} 
+              value={year.toString()}
+              className="text-white focus:bg-white/20 focus:text-white"
+              style={{ color: "white" }}
+            >
+              {year}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }
 
 export function DatePicker({
@@ -27,6 +154,20 @@ export function DatePicker({
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
+  const [currentMonth, setCurrentMonth] = React.useState<Date>(() => {
+    // Initialize with selected date or current date
+    if (value) {
+      try {
+        const date = parse(value, "yyyy-MM-dd", new Date());
+        if (isValid(date)) {
+          return date;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+    return new Date();
+  });
 
   // Convert YYYY-MM-DD to MM/DD/YYYY for display
   React.useEffect(() => {
@@ -35,6 +176,11 @@ export function DatePicker({
         const date = parse(value, "yyyy-MM-dd", new Date());
         if (isValid(date)) {
           setInputValue(format(date, "MM/dd/yyyy"));
+          // Only update current month if popover is closed (external value change)
+          // If popover is open, let user navigate freely
+          if (!open) {
+            setCurrentMonth(date);
+          }
         } else {
           setInputValue(value);
         }
@@ -44,7 +190,7 @@ export function DatePicker({
     } else {
       setInputValue("");
     }
-  }, [value]);
+  }, [value, open]);
 
   // Parse MM/DD/YYYY or M/D/YYYY input to Date
   const parseInputDate = (input: string): Date | null => {
@@ -121,9 +267,21 @@ export function DatePicker({
     if (date) {
       const formatted = format(date, "yyyy-MM-dd");
       onChange(formatted);
+      // Update current month to the selected date's month
+      setCurrentMonth(date);
       setOpen(false);
     }
   };
+
+  // Handle month navigation (from prev/next buttons or dropdowns)
+  const handleMonthChange = React.useCallback((newMonth: Date) => {
+    setCurrentMonth(newMonth);
+  }, []);
+
+  // Direct handler for month/year dropdown selections
+  const handleMonthSelect = React.useCallback((newMonth: Date) => {
+    setCurrentMonth(newMonth);
+  }, []);
 
   // Get selected date for calendar
   const selectedDate = React.useMemo(() => {
@@ -135,6 +293,16 @@ export function DatePicker({
       return undefined;
     }
   }, [value]);
+
+  // Update current month when popover opens to ensure it shows the selected date's month
+  React.useEffect(() => {
+    if (open && selectedDate) {
+      setCurrentMonth(selectedDate);
+    } else if (open && !selectedDate) {
+      // If no date is selected, show current month
+      setCurrentMonth(new Date());
+    }
+  }, [open, selectedDate]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -219,13 +387,15 @@ export function DatePicker({
           mode="single"
           selected={selectedDate}
           onSelect={handleCalendarSelect}
+          month={currentMonth}
+          onMonthChange={handleMonthChange}
           initialFocus
           className="dark-calendar"
           classNames={{
             months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
             month: "space-y-4",
-            caption: "flex justify-center pt-1 relative items-center",
-            caption_label: "text-sm font-medium text-white",
+            caption: "flex justify-center pt-1 relative items-center mb-1",
+            caption_label: "hidden",
             nav: "space-x-1 flex items-center",
             nav_button: cn(
               "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
@@ -253,6 +423,9 @@ export function DatePicker({
             day_hidden: "invisible",
           }}
           components={{
+            Caption: (props) => (
+              <CustomCaption {...props} onMonthSelect={handleMonthSelect} />
+            ),
             IconLeft: ({ ...props }) => (
               <ChevronLeft className="h-4 w-4" style={{ color: "white" }} {...props} />
             ),

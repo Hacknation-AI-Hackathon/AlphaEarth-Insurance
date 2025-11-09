@@ -21,8 +21,48 @@ export const DisasterImpactPopup = ({ isOpen, onClose, analysisData, selectedDis
 
   // Calculate summary metrics from analysis data
   const riskDistribution = analysisData?.riskDistribution || {};
-  const aiSummary = analysisData?.aiSummary || null;
+  const aiSummaryRaw = analysisData?.aiSummary || null;
   const portfolioMetrics = analysisData?.portfolioMetrics || {};
+  
+  // Format currency function (defined early for use in aiSummary)
+  const formatCurrency = (value: number) => {
+    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+    if (value >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
+    if (value >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;
+    return `$${value.toFixed(0)}`;
+  };
+  
+  // Handle both string and object formats for backward compatibility
+  const aiSummary = typeof aiSummaryRaw === 'string' ? {
+    situationOverview: aiSummaryRaw,
+    financialExposure: `Expected loss: ${formatCurrency(portfolioMetrics.expectedLoss || 0)}. Total properties at risk: ${(portfolioMetrics.totalProperties || 0).toLocaleString()}.`,
+    immediateActions: [
+      'Deploy field assessment team within 24 hours for ground-truth validation',
+      'Activate emergency claims hotline for policyholders in affected areas',
+      'Review and validate loss models - discrepancy analysis required'
+    ],
+    claimsTeamPreparation: [
+      'Expect 50-100 initial claims within 72 hours',
+      'Prioritize inspections for high-value properties',
+      'Coordinate with local contractors for rapid damage assessment'
+    ],
+    status: 'YELLOW',
+    statusColor: '#EAB308'
+  } : aiSummaryRaw;
+  
+  // Determine status message based on status level
+  const getStatusMessage = (status: string) => {
+    switch (status?.toUpperCase()) {
+      case 'RED':
+        return 'Critical - Immediate action required';
+      case 'YELLOW':
+        return 'Monitor closely, prepared for escalation';
+      case 'GREEN':
+        return 'Low risk - Continue monitoring';
+      default:
+        return 'Monitor closely, prepared for escalation';
+    }
+  };
   
   const totalProperties = portfolioMetrics.totalProperties || 5000;
   const expectedLoss = portfolioMetrics.expectedLoss || 36300000;
@@ -40,14 +80,6 @@ export const DisasterImpactPopup = ({ isOpen, onClose, analysisData, selectedDis
   
   // Get disaster coordinates if available
   const disasterCoordinates = analysisData?.disaster?.coordinates || selectedDisaster?.coordinates;
-  
-  // Format currency function
-  const formatCurrency = (value: number) => {
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
-    if (value >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;
-    return `$${value.toFixed(0)}`;
-  };
 
   // Toggle risk level selection
   const toggleRiskLevel = (level: string) => {
@@ -85,7 +117,7 @@ export const DisasterImpactPopup = ({ isOpen, onClose, analysisData, selectedDis
 
       // Filter properties based on selected risk levels
       const filteredProperties = properties.filter((property: any) => {
-        const riskLevel = (property.riskLevel || property.risk_category || property.riskCategory || 'low').toLowerCase();
+        const riskLevel = (property.riskTier || property.riskLevel || property.risk_category || property.riskCategory || 'low').toLowerCase();
         return selectedRiskLevels.has(riskLevel);
       });
 
@@ -117,7 +149,7 @@ export const DisasterImpactPopup = ({ isOpen, onClose, analysisData, selectedDis
       
       // Create markers for filtered properties
       validProperties.forEach(({ lat, lon, property }) => {
-        const riskLevel = (property.riskLevel || property.risk_category || property.riskCategory || 'low').toLowerCase();
+        const riskLevel = (property.riskTier || property.riskLevel || property.risk_category || property.riskCategory || 'low').toLowerCase();
         let markerColor = '#22C55E'; // Low - green
         
         switch (riskLevel) {
@@ -405,42 +437,182 @@ export const DisasterImpactPopup = ({ isOpen, onClose, analysisData, selectedDis
                   />
                   
                   <div 
-                    className="relative z-10 p-6"
+                    className="relative z-10 p-8"
                     style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
                   >
-                    <h3 className="text-lg font-bold mb-2" style={{ color: '#0075FF', fontFamily: 'Plus Jakarta Display, sans-serif' }}>
-                      AI Executive Summary
-                    </h3>
-                    <h4 className="text-base font-semibold mb-4" style={{ color: 'white', fontFamily: 'Plus Jakarta Display, sans-serif' }}>
-                      # {selectedDisaster?.type?.toUpperCase() || 'EARTHQUAKE'} INCIDENT - EXECUTIVE SUMMARY
-                    </h4>
-                    <div className="space-y-4 text-sm" style={{ color: '#A0AEC0', fontFamily: 'Plus Jakarta Display, sans-serif' }}>
+                    {/* Title Section */}
+                    <div className="mb-6">
+                      <h3 
+                        className="text-base font-bold mb-3" 
+                        style={{ 
+                          color: '#0075FF', 
+                          fontFamily: 'Plus Jakarta Display, sans-serif',
+                          fontSize: '14px',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
+                        AI Executive Summary
+                      </h3>
+                      <h4 
+                        className="text-2xl font-bold mb-6" 
+                        style={{ 
+                          color: 'white', 
+                          fontFamily: 'Plus Jakarta Display, sans-serif',
+                          lineHeight: '1.3',
+                          fontSize: '24px'
+                        }}
+                      >
+                        {selectedDisaster?.type?.toUpperCase()?.replace(/-/g, '-') || 'SEVERE-WEATHER'} INCIDENT - EXECUTIVE SUMMARY
+                      </h4>
+                    </div>
+
+                    {/* Content Sections */}
+                    <div className="space-y-6" style={{ color: '#A0AEC0', fontFamily: 'Plus Jakarta Display, sans-serif', fontSize: '14px', lineHeight: '1.6' }}>
+                      {/* Situation Overview */}
                       <div>
-                        <h5 className="font-bold mb-2" style={{ color: 'white' }}>## Situation Overview</h5>
-                        <p>{aiSummary.situationOverview || 'A disaster has been detected affecting our regional portfolio.'}</p>
+                        <h5 
+                          className="font-bold mb-3 text-base" 
+                          style={{ 
+                            color: 'white', 
+                            fontFamily: 'Plus Jakarta Display, sans-serif',
+                            fontSize: '16px',
+                            marginBottom: '12px'
+                          }}
+                        >
+                          Situation Overview
+                        </h5>
+                        <p style={{ color: '#A0AEC0', lineHeight: '1.7' }}>
+                          {aiSummary?.situationOverview || 'A disaster has been detected affecting our regional portfolio.'}
+                        </p>
                       </div>
+
+                      {/* Financial Exposure */}
                       <div>
-                        <h5 className="font-bold mb-2" style={{ color: 'white' }}>## Financial Exposure</h5>
-                        <p>{aiSummary.financialExposure || 'Financial exposure analysis details will be displayed here.'}</p>
+                        <h5 
+                          className="font-bold mb-3 text-base" 
+                          style={{ 
+                            color: 'white', 
+                            fontFamily: 'Plus Jakarta Display, sans-serif',
+                            fontSize: '16px',
+                            marginBottom: '12px'
+                          }}
+                        >
+                          Financial Exposure
+                        </h5>
+                        <p style={{ color: '#A0AEC0', lineHeight: '1.7' }}>
+                          {aiSummary?.financialExposure || `Expected loss: ${formatCurrency(expectedLoss)}. Total properties at risk: ${totalProperties.toLocaleString()}. Critical risk properties: ${criticalCount}.`}
+                        </p>
                       </div>
+
+                      {/* Immediate Actions Required */}
                       <div>
-                        <h5 className="font-bold mb-2" style={{ color: 'white' }}>## Immediate Actions Required</h5>
-                        <ol className="list-decimal list-inside space-y-1 ml-2">
-                          <li><strong>Deploy field assessment team</strong> within 24 hours for ground-truth validation</li>
-                          <li><strong>Activate emergency claims hotline</strong> for policyholders in affected areas</li>
-                          <li><strong>Review and validate loss models</strong> - discrepancy analysis required</li>
+                        <h5 
+                          className="font-bold mb-3 text-base" 
+                          style={{ 
+                            color: 'white', 
+                            fontFamily: 'Plus Jakarta Display, sans-serif',
+                            fontSize: '16px',
+                            marginBottom: '12px'
+                          }}
+                        >
+                          Immediate Actions Required
+                        </h5>
+                        <ol 
+                          className="space-y-2 ml-1" 
+                          style={{ 
+                            listStyle: 'decimal',
+                            paddingLeft: '20px',
+                            color: '#A0AEC0'
+                          }}
+                        >
+                          {(aiSummary?.immediateActions || [
+                            'Deploy field assessment team within 24 hours for ground-truth validation',
+                            'Activate emergency claims hotline for policyholders in affected areas',
+                            'Review and validate loss models - discrepancy analysis required'
+                          ]).map((action: string, index: number) => {
+                            // Handle actions that may have bold text markers
+                            const parts = action.split(/(\*\*.*?\*\*)/g);
+                            if (parts.length > 1) {
+                              return (
+                                <li key={index} style={{ paddingLeft: '4px', lineHeight: '1.7' }}>
+                                  {parts.map((part, i) => {
+                                    if (part.startsWith('**') && part.endsWith('**')) {
+                                      const boldText = part.slice(2, -2);
+                                      return <strong key={i} style={{ color: 'white' }}>{boldText}</strong>;
+                                    }
+                                    return <span key={i}>{part}</span>;
+                                  })}
+                                </li>
+                              );
+                            }
+                            // Regular action text - extract first few words as bold
+                            const words = action.split(' ');
+                            const boldWords = words.slice(0, Math.min(3, words.length)).join(' ');
+                            const remainingText = words.slice(Math.min(3, words.length)).join(' ');
+                            return (
+                              <li key={index} style={{ paddingLeft: '4px', lineHeight: '1.7' }}>
+                                <strong style={{ color: 'white' }}>{boldWords}</strong> {remainingText}
+                              </li>
+                            );
+                          })}
                         </ol>
                       </div>
+
+                      {/* Claims Team Preparation */}
                       <div>
-                        <h5 className="font-bold mb-2" style={{ color: 'white' }}>## Claims Team Preparation</h5>
-                        <ul className="list-disc list-inside space-y-1 ml-2">
-                          <li>Expect 50-100 initial claims within 72 hours</li>
-                          <li>Prioritize inspections for high-value properties</li>
-                          <li>Coordinate with local contractors for rapid damage assessment</li>
+                        <h5 
+                          className="font-bold mb-3 text-base" 
+                          style={{ 
+                            color: 'white', 
+                            fontFamily: 'Plus Jakarta Display, sans-serif',
+                            fontSize: '16px',
+                            marginBottom: '12px'
+                          }}
+                        >
+                          Claims Team Preparation
+                        </h5>
+                        <ul 
+                          className="space-y-2 ml-1" 
+                          style={{ 
+                            listStyle: 'disc',
+                            paddingLeft: '20px',
+                            color: '#A0AEC0'
+                          }}
+                        >
+                          {(aiSummary?.claimsTeamPreparation || [
+                            'Expect 50-100 initial claims within 72 hours',
+                            'Prioritize inspections for high-value properties',
+                            'Coordinate with local contractors for rapid damage assessment'
+                          ]).map((item: string, index: number) => (
+                            <li key={index} style={{ paddingLeft: '4px', lineHeight: '1.7' }}>
+                              {item}
+                            </li>
+                          ))}
                         </ul>
                       </div>
-                      <div>
-                        <p><strong style={{ color: 'white' }}>Status:</strong> YELLOW - Monitor closely, prepared for escalation</p>
+
+                      {/* Status Indicator */}
+                      <div 
+                        className="mt-6 pt-4 border-t"
+                        style={{ 
+                          borderColor: 'rgba(255, 255, 255, 0.1)',
+                          paddingTop: '20px'
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ 
+                              background: aiSummary?.statusColor || '#EAB308',
+                              boxShadow: `0 0 8px ${(aiSummary?.statusColor || '#EAB308')}80`
+                            }}
+                          />
+                          <p style={{ color: '#A0AEC0', fontSize: '14px' }}>
+                            <strong style={{ color: aiSummary?.statusColor || '#EAB308', fontSize: '15px' }}>
+                              Status: {aiSummary?.status || 'YELLOW'}
+                            </strong> - {getStatusMessage(aiSummary?.status || 'YELLOW')}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
