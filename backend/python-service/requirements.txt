@@ -1,7 +1,29 @@
+# Web Framework
 flask
 flask-cors
+
+# Google Earth Engine
 earthengine-api
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
 
+# Data Processing
+numpy
+opencv-python
+scikit-image
+Pillow
+
+# Environment & Configuration
+python-dotenv
+
+# HTTP & Async
+requests
+aiohttp
+
+# Data Validation
+pydantic
+
+# Utilities
+python-dateutil
+pytz

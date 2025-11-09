@@ -1,5 +1,6 @@
 import express from 'express';
 import { processClaim } from '../services/claimProcessingService.js';
+import { summarizeClaimDecision } from '../services/summarizationService.js';
 
 // Log that this route file is being loaded
 console.log('📋 [ROUTES] claimProcessingRoutes.js loaded');
@@ -8,7 +9,7 @@ console.log('   Route will be available at: POST /api/claim_processing/basic');
 const router = express.Router();
 
 /**
- * POST /api/claim_processing_basic
+ * POST /api/claim_processing/basic
  * Process damage claims from satellite imagery
  * 
  * Request body:
@@ -33,7 +34,7 @@ const router = express.Router();
  */
 router.post('/basic', async (req, res, next) => {
   // Force immediate flush of console output
-  process.stdout.write(''); // This helps ensure console.log flushes
+  process.stdout.write('');
   
   const requestStartTime = Date.now();
   
@@ -132,7 +133,7 @@ router.post('/basic', async (req, res, next) => {
       console.error('   Error:', processError);
       console.error('   Error message:', processError.message);
       console.error('   Error stack:', processError.stack);
-      throw processError; // Re-throw to be caught by outer catch
+      throw processError;
     }
     
     const processingDuration = ((Date.now() - processingStartTime) / 1000).toFixed(2);
@@ -146,7 +147,7 @@ router.post('/basic', async (req, res, next) => {
       throw new Error('processClaim returned null or undefined');
     }
     
-    // Log result structure with explicit console.log calls for each field
+    // Log result structure
     console.log('   ═══════════════════════════════════════════════════════');
     console.log('   📊 RESULT STRUCTURE ANALYSIS:');
     console.log('   ═══════════════════════════════════════════════════════');
@@ -158,7 +159,6 @@ router.post('/basic', async (req, res, next) => {
     console.log('   rankedHazardsCount:', result.ranked_hazards?.length || 0);
     console.log('   ═══════════════════════════════════════════════════════');
     
-    // Also log as object
     const resultStructure = {
       hasPreprocessing: !!result.preprocessing,
       hasHazard: !!result.hazard,
@@ -194,7 +194,35 @@ router.post('/basic', async (req, res, next) => {
     }
     
     console.log('-'.repeat(80));
-    console.log('📤 [RESPONSE] Sending response to client...');
+    console.log('📤 [RESPONSE] Preparing response to client...');
+    
+    // AI Summary Generation (if enabled)
+    const summaryRequested = config.claim?.include_summary !== false;
+    if (summaryRequested && result.claim) {
+      console.log('🧠 [AI SUMMARY] Ensuring summary is present...');
+      if (result.summary) {
+        console.log('   ✅ Summary already provided by upstream service');
+      } else {
+        try {
+          console.log('   🔄 Generating summary via summarizationService...');
+          result.summary = await summarizeClaimDecision(result.claim);
+          console.log('   ✅ AI summary generated successfully');
+        } catch (summaryError) {
+          console.error('   ❌ Failed to generate AI summary:', summaryError.message);
+          console.error('   Stack:', summaryError.stack);
+        }
+      }
+
+      if (result.summary) {
+        console.log('   📝 AI Summary:', result.summary);
+      } else {
+        console.log('   ⚠️  AI summary unavailable; proceeding without summary');
+      }
+    } else if (!summaryRequested) {
+      console.log('🧠 [AI SUMMARY] Summary generation disabled via config');
+    } else {
+      console.log('🧠 [AI SUMMARY] Summary generation skipped (no claim data)');
+    }
     
     const response = {
       success: true,
@@ -202,7 +230,7 @@ router.post('/basic', async (req, res, next) => {
     };
     
     const totalDuration = ((Date.now() - requestStartTime) / 1000).toFixed(2);
-    console.log('✅ [RESPONSE] Response sent successfully');
+    console.log('✅ [RESPONSE] Sending response to client');
     console.log('   Total request duration:', totalDuration, 'seconds');
     console.log('   Response size:', JSON.stringify(response).length, 'bytes');
     console.log('='.repeat(80));
@@ -233,4 +261,3 @@ router.post('/basic', async (req, res, next) => {
 });
 
 export default router;
-
