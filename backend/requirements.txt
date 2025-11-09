@@ -6,3 +6,5 @@ folium
 fastapi
 pydantic
 uvicorn
+pandas
+geemap

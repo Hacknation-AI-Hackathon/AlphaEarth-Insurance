@@ -160,13 +160,16 @@ def spatial_coherence_check(aoi, mask_image, scale=30):
         return 0.0
 
 
-def confidence_score(cross_sensor, meteorology, coherence):
+def confidence_score(cross_sensor, meteorology, coherence, embedding_change=None):
     """
     Weighted confidence score.
     Returns normalized score (0–1) and qualitative label.
     """
-    weights = [0.2, 0.4, 0.4]
+    weights = [0.2, 0.35, 0.35]
     components = [cross_sensor, meteorology, coherence]
+    if embedding_change is not None:
+        weights.append(0.1)
+        components.append(embedding_change * 100)
     score = sum(w * (c / 100) for w, c in zip(weights, components))
     label = (
         "Low" if score < 0.4 else

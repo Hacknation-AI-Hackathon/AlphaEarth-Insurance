@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, FieldValidationInfo, field_validator
 
 from src.hazard_detection import detect_flood, detect_roof_damage, detect_wildfire
+from src.alphaearth import alphaearth_change_score
 from src.claim_decision import decide_claim
 from src.preprocessing import get_imagery, to_geometry
 from src.summarizer import summarize_claim_decision
@@ -143,7 +144,7 @@ def _run_hazard(pre_img, post_img, hazard_key: str, scale: int, aoi_geom, includ
     return detector(pre_img, post_img, aoi=aoi_geom, scale=scale), None
 
 
-def _run_validation(aoi_geom, pre_window, post_window, mask_image, scale: int, hazard: str):
+def _run_validation(aoi_geom, pre_window, post_window, mask_image, scale: int, hazard: str, pre_img, post_img):
     if mask_image is None:
         return {
             "cross_sensor": 0.0,
@@ -155,11 +156,13 @@ def _run_validation(aoi_geom, pre_window, post_window, mask_image, scale: int, h
         cross = cross_sensor_check(aoi_geom, pre_window[0], post_window[0], scale=scale)
         met = meteorology_check(aoi_geom, post_window, hazard=hazard)
         coherence = spatial_coherence_check(aoi_geom, mask_image, scale=scale)
-        conf = confidence_score(cross, met, coherence)
+        emb_score = alphaearth_change_score(pre_img, post_img, aoi_geom)
+        conf = confidence_score(cross, met, coherence, emb_score)
         return {
             "cross_sensor": round(cross, 2),
             "meteorology": round(met, 2),
             "spatial_coherence": round(coherence, 2),
+            "embedding_change": round(emb_score, 3),
             "confidence": conf,
         }
     except Exception as exc:  # pragma: no cover
@@ -196,6 +199,8 @@ def _build_response(config: orchestrator_schema) -> Dict:
             mask,
             scale,
             hazard_key,
+            imagery["pre"]["image"],
+            imagery["post"]["image"],
         )
         claim_result = decide_claim(hazard_result, validation)
         fused_score = claim_result.get("fused_score", 0.0)
@@ -265,4 +270,4 @@ def claim_detection_basic(config: orchestrator_schema):
 
 
 if __name__ == "__main__":
-    uvicorn.run("automated_app:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=True)
+    uvicorn.run("automated_app_basic:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=True)
