@@ -107,9 +107,9 @@ export const Hero = () => {
 
           {/* CTA Buttons - Apple-style */}
           <div className="flex justify-center items-center gap-4 pt-8">
-            {/* Learn More Button - Solid Blue */}
+            {/* Sign Up Button - Solid Blue */}
             <a 
-              href="/demo"
+              href="/signup"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -129,7 +129,7 @@ export const Hero = () => {
               onMouseEnter={(e) => e.currentTarget.style.background = '#0077ed'}
               onMouseLeave={(e) => e.currentTarget.style.background = '#0071e3'}
             >
-              View Demo
+              Sign Up
             </a>
             
             {/* View Demo Button - Transparent with Blue Border */}

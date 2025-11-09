@@ -18,27 +18,55 @@ import dashboardRoutes from '../backend/src/routes/dashboardRoutes.js';
 
 const app = express();
 
-// Determine CORS origin
+// Normalize CORS origins - remove trailing slashes to avoid mismatches
+const normalizeOrigin = (origin) => {
+  if (!origin) return origin;
+  return origin.trim().replace(/\/+$/, ''); // Remove trailing slashes
+};
+
+// Determine CORS origin(s)
 const getCorsOrigin = () => {
   if (process.env.CORS_ORIGIN) {
     // Support comma-separated list of origins
-    return process.env.CORS_ORIGIN.split(',').map(origin => origin.trim());
+    return process.env.CORS_ORIGIN.split(',').map(normalizeOrigin);
   }
   // On Vercel, allow requests from the same domain and preview deployments
   if (process.env.VERCEL_URL) {
     const baseUrl = `https://${process.env.VERCEL_URL}`;
     // Also allow requests from the same domain without subdomain if applicable
-    return [baseUrl];
+    return [normalizeOrigin(baseUrl)];
   }
   // Development origins
   return ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:3000'];
 };
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-read_file
 
 // Middleware
 app.use(cors({
-  origin: getCorsOrigin(),
+  origin: (origin, callback) => {
+    const allowedOrigins = getCorsOrigin();
+    const normalizedOrigin = normalizeOrigin(origin);
+    
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!normalizedOrigin) {
+      return callback(null, true);
+    }
+    
+    // Check if the normalized origin is in the allowed list
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+    
+    // Also check if any allowed origin matches when normalized
+    const isAllowed = allowedOrigins.some(allowed => 
+      normalizeOrigin(allowed) === normalizedOrigin
+    );
+    
+    if (isAllowed) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 
