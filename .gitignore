@@ -88,3 +88,12 @@ out
 # Temporary folders
 tmp/
 temp/
+
+
+# API Gateway
+api-gateway/node_modules
+api-gateway/.env
+
+# Node.js Backend
+backend-nodejs/node_modules
+backend-nodejs/.env
