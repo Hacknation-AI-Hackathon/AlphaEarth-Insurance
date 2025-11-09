@@ -75,7 +75,8 @@ router.post('/policies', async (req, res) => {
 /**
  * POST /api/parametric/evaluate/:policyId
  * Evaluate triggers for a policy using multi-source satellite data
- * This integrates with the satelliteWindService for real-time wind measurements
+ * Supports both wind speed triggers (satelliteWindService) and flood triggers (floodDetectionService)
+ * for comprehensive parametric insurance coverage
  */
 router.post('/evaluate/:policyId', async (req, res) => {
   try {

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { AlertCircle, Wind, CheckCircle, XCircle, TrendingUp, DollarSign } from "lucide-react";
+import { AlertCircle, Wind, CheckCircle, XCircle, TrendingUp, DollarSign, Waves } from "lucide-react";
 
 const API_URL = "http://localhost:5001/api/parametric";
 
@@ -30,7 +30,7 @@ interface Policy {
   };
   triggers: Array<{
     type: string;
-    threshold: number;
+    threshold: number | string; // number for wind, string for flood risk levels
     payout: number;
     description: string;
   }>;
@@ -48,6 +48,32 @@ interface WindSource {
   timestamp: string;
 }
 
+interface FloodSource {
+  source: string;
+  confidence: string;
+  method: string;
+  timestamp: string;
+  // USGS specific fields
+  waterLevel?: number;
+  waterLevelChange?: number;
+  floodStage?: number;
+  siteName?: string;
+  // Precipitation specific fields
+  precipitation24h?: number;
+  precipitation7d?: number;
+  intensity?: string;
+  // Soil moisture specific fields
+  soilMoisture?: number;
+  saturation?: number;
+  // NOAA alerts specific fields
+  alertCount?: number;
+  alerts?: Array<{
+    event: string;
+    severity: string;
+    headline: string;
+  }>;
+}
+
 interface Payout {
   id: string;
   policyId: string;
@@ -56,11 +82,11 @@ interface Payout {
   currency: string;
   trigger: {
     type: string;
-    threshold: number;
+    threshold: number | string;
     description: string;
   };
   evidence: {
-    windData: {
+    windData?: {
       consensus: {
         windSpeed: number;
         confidence: string;
@@ -69,6 +95,22 @@ interface Payout {
         range: { min: number; max: number };
       };
       sources: WindSource[];
+      timestamp: string;
+    };
+    floodData?: {
+      assessment: {
+        riskScore: number;
+        riskLevel: string;
+        confidence: string;
+        factors: {
+          waterLevel: number;
+          precipitation: number;
+          soilSaturation: number;
+          alerts: number;
+        };
+        sourceCount: number;
+      };
+      sources: FloodSource[];
       timestamp: string;
     };
   };
@@ -225,6 +267,27 @@ export default function ParametricInsurance() {
     return <Badge className={colors[confidence] || "bg-gray-500"}>{confidence.toUpperCase()}</Badge>;
   };
 
+  const getRainIntensityBadge = (intensity: string) => {
+    const colors: Record<string, string> = {
+      extreme: "bg-red-600 text-white",
+      heavy: "bg-orange-600 text-white",
+      moderate: "bg-yellow-600 text-white",
+      light: "bg-blue-500 text-white",
+      none: "bg-gray-500 text-white",
+    };
+    return <Badge className={colors[intensity] || "bg-gray-500"}>{intensity.toUpperCase()} RAIN</Badge>;
+  };
+
+  const getFloodAlertBadge = (severity: string) => {
+    const colors: Record<string, string> = {
+      Extreme: "bg-red-700 text-white animate-pulse",
+      Severe: "bg-red-600 text-white",
+      Moderate: "bg-orange-500 text-white",
+      Minor: "bg-yellow-500 text-white",
+    };
+    return <Badge className={colors[severity] || "bg-gray-500"}>{severity.toUpperCase()}</Badge>;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -303,7 +366,7 @@ export default function ParametricInsurance() {
               Active Policies
             </CardTitle>
             <CardDescription className="text-slate-400">
-              Insurance policies with parametric wind speed triggers
+              Insurance policies with parametric wind speed and flood risk triggers
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -334,11 +397,20 @@ export default function ParametricInsurance() {
                   <p className="text-sm font-semibold text-slate-300">Triggers:</p>
                   {policy.triggers.map((trigger, idx) => (
                     <div key={idx} className="bg-slate-600 rounded p-2 flex justify-between items-center">
-                      <div>
-                        <p className="text-sm text-white">{trigger.description}</p>
-                        <p className="text-xs text-slate-400">
-                          Wind ≥ {trigger.threshold} km/h
-                        </p>
+                      <div className="flex items-center gap-2">
+                        {trigger.type === 'wind_speed' ? (
+                          <Wind className="h-4 w-4 text-blue-400" />
+                        ) : (
+                          <Waves className="h-4 w-4 text-cyan-400" />
+                        )}
+                        <div>
+                          <p className="text-sm text-white">{trigger.description}</p>
+                          <p className="text-xs text-slate-400">
+                            {trigger.type === 'wind_speed'
+                              ? `Wind ≥ ${trigger.threshold} km/h`
+                              : `Flood Risk ≥ ${String(trigger.threshold).toUpperCase()}`}
+                          </p>
+                        </div>
                       </div>
                       <p className="text-sm font-bold text-green-400">
                         ${trigger.payout.toLocaleString()}
@@ -358,7 +430,7 @@ export default function ParametricInsurance() {
                 >
                   <Wind className="h-4 w-4 mr-2" />
                   {evaluateMutation.isPending && selectedPolicy === policy.id
-                    ? "Measuring Wind..."
+                    ? "Evaluating Conditions..."
                     : "Evaluate Triggers Now"}
                 </Button>
 
@@ -389,7 +461,7 @@ export default function ParametricInsurance() {
                       </div>
                     )}
 
-                    {/* Consensus */}
+                    {/* Wind Consensus */}
                     {evaluationResults.triggersEvaluated[0]?.windData?.consensus && (
                       <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded p-3">
                         <p className="text-xs text-blue-300 mb-1">CONSENSUS WIND SPEED</p>
@@ -406,6 +478,122 @@ export default function ParametricInsurance() {
                             {getConfidenceBadge(evaluationResults.triggersEvaluated[0].windData.consensus.confidence)}
                             <p className="text-xs text-slate-300 mt-1">
                               {evaluationResults.triggersEvaluated[0].windData.consensus.sourceCount} sources
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Flood Data Sources */}
+                    {evaluationResults.triggersEvaluated[0]?.floodData?.sources && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-400">Flood Data Sources:</p>
+                        {evaluationResults.triggersEvaluated[0].floodData.sources.map((source: FloodSource, idx: number) => (
+                          <div key={idx} className="bg-slate-800 rounded p-2">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <p className="text-sm text-white font-medium">{source.source}</p>
+                                <p className="text-xs text-slate-400">{source.method}</p>
+                                {source.waterLevel && (
+                                  <p className="text-xs text-cyan-400 mt-1">
+                                    Water Level: {source.waterLevel.toFixed(2)} ft {source.floodStage && `(Flood Stage: ${source.floodStage.toFixed(2)} ft)`}
+                                  </p>
+                                )}
+                                {source.precipitation24h !== undefined && (
+                                  <div className="mt-2 space-y-1">
+                                    <p className="text-xs text-cyan-400">
+                                      Precipitation: {source.precipitation24h.toFixed(1)} mm (24h) • {source.precipitation7d?.toFixed(1)} mm (7d)
+                                    </p>
+                                    {source.intensity && (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-slate-400">Rain Intensity:</span>
+                                        {getRainIntensityBadge(source.intensity)}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                {source.saturation !== undefined && (
+                                  <p className="text-xs text-cyan-400 mt-1">
+                                    Soil Saturation: {source.saturation}%
+                                  </p>
+                                )}
+                                {source.alertCount && source.alertCount > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    <p className="text-xs text-red-400 font-semibold">⚠️ {source.alertCount} Flood Alert(s)</p>
+                                    {source.alerts?.map((alert, alertIdx) => (
+                                      <div key={alertIdx} className="bg-red-900/30 border border-red-600 rounded p-2">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          {getFloodAlertBadge(alert.severity)}
+                                          <span className="text-xs text-red-300 font-medium">{alert.event}</span>
+                                        </div>
+                                        <p className="text-xs text-red-200">{alert.headline}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-right ml-2">
+                                {getConfidenceBadge(source.confidence)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Flood Risk Summary Card */}
+                    {evaluationResults.triggersEvaluated[0]?.floodData && (
+                      <div className="bg-gradient-to-br from-cyan-900 to-blue-900 border-2 border-cyan-500 rounded-lg p-4 space-y-3">
+                        <p className="text-sm font-bold text-cyan-300 uppercase">🌊 Flood Risk Summary</p>
+
+                        {/* Rain Intensity */}
+                        {evaluationResults.triggersEvaluated[0].floodData.sources.find((s: FloodSource) => s.intensity) && (
+                          <div className="bg-slate-800/50 rounded p-2">
+                            <p className="text-xs text-slate-300 mb-1">Rain Intensity</p>
+                            {getRainIntensityBadge(
+                              evaluationResults.triggersEvaluated[0].floodData.sources.find((s: FloodSource) => s.intensity)?.intensity || 'none'
+                            )}
+                            <p className="text-xs text-cyan-300 mt-1">
+                              {evaluationResults.triggersEvaluated[0].floodData.sources.find((s: FloodSource) => s.precipitation24h)?.precipitation24h?.toFixed(1)} mm (24h)
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Flood Warnings */}
+                        {evaluationResults.triggersEvaluated[0].floodData.sources.find((s: FloodSource) => s.alertCount && s.alertCount > 0) && (
+                          <div className="bg-red-900/30 border border-red-500 rounded p-2">
+                            <p className="text-xs text-red-300 font-bold mb-2">
+                              ⚠️ Active Flood Warnings: {evaluationResults.triggersEvaluated[0].floodData.sources.find((s: FloodSource) => s.alertCount)?.alertCount}
+                            </p>
+                            {evaluationResults.triggersEvaluated[0].floodData.sources
+                              .find((s: FloodSource) => s.alerts)?.alerts?.map((alert, idx) => (
+                                <div key={idx} className="flex items-center gap-2 mb-1">
+                                  {getFloodAlertBadge(alert.severity)}
+                                  <span className="text-xs text-red-200">{alert.event}</span>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Flood Risk Assessment */}
+                    {evaluationResults.triggersEvaluated[0]?.floodData?.assessment && (
+                      <div className="bg-gradient-to-r from-cyan-900 to-cyan-800 rounded p-3">
+                        <p className="text-xs text-cyan-300 mb-1">FLOOD RISK ASSESSMENT</p>
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="text-2xl font-bold text-white">
+                              {evaluationResults.triggersEvaluated[0].floodData.assessment.riskLevel.toUpperCase()}
+                            </p>
+                            <p className="text-xs text-slate-300">
+                              Risk Score: {evaluationResults.triggersEvaluated[0].floodData.assessment.riskScore}/100
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            {getConfidenceBadge(evaluationResults.triggersEvaluated[0].floodData.assessment.confidence)}
+                            <p className="text-xs text-slate-300 mt-1">
+                              {evaluationResults.triggersEvaluated[0].floodData.assessment.sourceCount} sources
                             </p>
                           </div>
                         </div>
@@ -502,41 +690,153 @@ export default function ParametricInsurance() {
                   <div className="bg-slate-600 rounded p-3">
                     <p className="text-xs text-slate-400">Triggered By</p>
                     <p className="text-sm text-white font-semibold">{payout.trigger.description}</p>
-                    <p className="text-xs text-slate-400">Threshold: {payout.trigger.threshold} km/h</p>
+                    <p className="text-xs text-slate-400">
+                      Threshold: {typeof payout.trigger.threshold === 'number'
+                        ? `${payout.trigger.threshold} km/h`
+                        : String(payout.trigger.threshold).toUpperCase() + ' risk'}
+                    </p>
                   </div>
 
                   {/* Evidence */}
                   <div className="space-y-2">
                     <p className="text-sm font-semibold text-white">Satellite Evidence:</p>
 
-                    {/* Consensus */}
-                    <div className="bg-blue-900 rounded p-3">
-                      <p className="text-xs text-blue-300">CONSENSUS MEASUREMENT</p>
-                      <div className="flex justify-between items-center mt-1">
-                        <p className="text-xl font-bold text-white">
-                          {payout.evidence.windData.consensus.windSpeed.toFixed(1)} km/h
-                        </p>
-                        {getConfidenceBadge(payout.evidence.windData.consensus.confidence)}
-                      </div>
-                      <p className="text-xs text-slate-300 mt-1">
-                        {payout.evidence.windData.consensus.sourceCount} sources •
-                        σ = {payout.evidence.windData.consensus.standardDeviation.toFixed(1)} km/h
-                      </p>
-                    </div>
+                    {/* Wind Consensus */}
+                    {payout.evidence.windData && (
+                      <>
+                        <div className="bg-blue-900 rounded p-3">
+                          <p className="text-xs text-blue-300">CONSENSUS WIND MEASUREMENT</p>
+                          <div className="flex justify-between items-center mt-1">
+                            <p className="text-xl font-bold text-white">
+                              {payout.evidence.windData.consensus.windSpeed.toFixed(1)} km/h
+                            </p>
+                            {getConfidenceBadge(payout.evidence.windData.consensus.confidence)}
+                          </div>
+                          <p className="text-xs text-slate-300 mt-1">
+                            {payout.evidence.windData.consensus.sourceCount} sources •
+                            σ = {payout.evidence.windData.consensus.standardDeviation.toFixed(1)} km/h
+                          </p>
+                        </div>
 
-                    {/* Sources */}
-                    {payout.evidence.windData.sources.map((source, idx) => (
-                      <div key={idx} className="bg-slate-600 rounded p-2 flex justify-between items-center">
-                        <div>
-                          <p className="text-xs text-white">{source.source}</p>
-                          <p className="text-xs text-slate-400">{source.method}</p>
+                        {/* Wind Sources */}
+                        {payout.evidence.windData.sources.map((source, idx) => (
+                          <div key={idx} className="bg-slate-600 rounded p-2 flex justify-between items-center">
+                            <div>
+                              <p className="text-xs text-white">{source.source}</p>
+                              <p className="text-xs text-slate-400">{source.method}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-blue-400">{source.windSpeed.toFixed(1)} km/h</p>
+                              {getConfidenceBadge(source.confidence)}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+
+                    {/* Flood Risk Summary */}
+                    {payout.evidence.floodData && (
+                      <>
+                        <div className="bg-gradient-to-br from-cyan-900 to-blue-900 border-2 border-cyan-500 rounded p-3 space-y-2">
+                          <p className="text-sm font-bold text-cyan-300 uppercase">🌊 Flood Evidence</p>
+
+                          {/* Rain Intensity */}
+                          {payout.evidence.floodData.sources.find((s) => s.intensity) && (
+                            <div className="bg-slate-700/50 rounded p-2">
+                              <p className="text-xs text-slate-300 mb-1">Rain Intensity</p>
+                              {getRainIntensityBadge(
+                                payout.evidence.floodData.sources.find((s) => s.intensity)?.intensity || 'none'
+                              )}
+                              <p className="text-xs text-cyan-200 mt-1">
+                                {payout.evidence.floodData.sources.find((s) => s.precipitation24h)?.precipitation24h?.toFixed(1)} mm in 24h
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Flood Warnings */}
+                          {payout.evidence.floodData.sources.find((s) => s.alertCount && s.alertCount > 0) && (
+                            <div className="bg-red-900/40 border border-red-500 rounded p-2">
+                              <p className="text-xs text-red-300 font-bold mb-1">
+                                ⚠️ {payout.evidence.floodData.sources.find((s) => s.alertCount)?.alertCount} Flood Warning(s)
+                              </p>
+                              {payout.evidence.floodData.sources
+                                .find((s) => s.alerts)?.alerts?.map((alert, idx) => (
+                                  <div key={idx} className="flex items-center gap-1 mb-1">
+                                    {getFloodAlertBadge(alert.severity)}
+                                    <span className="text-xs text-red-200">{alert.event}</span>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-blue-400">{source.windSpeed.toFixed(1)} km/h</p>
-                          {getConfidenceBadge(source.confidence)}
+
+                        <div className="bg-cyan-900 rounded p-3">
+                          <p className="text-xs text-cyan-300">FLOOD RISK ASSESSMENT</p>
+                          <div className="flex justify-between items-center mt-1">
+                            <p className="text-xl font-bold text-white">
+                              {payout.evidence.floodData.assessment.riskLevel.toUpperCase()}
+                            </p>
+                            {getConfidenceBadge(payout.evidence.floodData.assessment.confidence)}
+                          </div>
+                          <p className="text-xs text-slate-300 mt-1">
+                            {payout.evidence.floodData.assessment.sourceCount} sources •
+                            Risk Score: {payout.evidence.floodData.assessment.riskScore}/100
+                          </p>
                         </div>
-                      </div>
-                    ))}
+
+                        {/* Flood Sources */}
+                        {payout.evidence.floodData.sources.map((source, idx) => (
+                          <div key={idx} className="bg-slate-600 rounded p-2">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <p className="text-xs text-white font-medium">{source.source}</p>
+                                <p className="text-xs text-slate-400">{source.method}</p>
+                                {source.waterLevel && (
+                                  <p className="text-xs text-cyan-400 mt-1">
+                                    Water: {source.waterLevel.toFixed(2)} ft {source.floodStage && `(Flood Stage: ${source.floodStage.toFixed(2)} ft)`}
+                                  </p>
+                                )}
+                                {source.precipitation24h !== undefined && (
+                                  <div className="mt-1 space-y-1">
+                                    <p className="text-xs text-cyan-400">
+                                      Precip: {source.precipitation24h.toFixed(1)} mm (24h) • {source.precipitation7d?.toFixed(1)} mm (7d)
+                                    </p>
+                                    {source.intensity && (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs text-slate-300">Intensity:</span>
+                                        {getRainIntensityBadge(source.intensity)}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                {source.saturation !== undefined && (
+                                  <p className="text-xs text-cyan-400 mt-1">
+                                    Soil: {source.saturation}%
+                                  </p>
+                                )}
+                                {source.alertCount && source.alertCount > 0 && (
+                                  <div className="mt-1 space-y-1">
+                                    <p className="text-xs text-red-300 font-semibold">⚠️ {source.alertCount} Alert(s)</p>
+                                    {source.alerts?.map((alert, alertIdx) => (
+                                      <div key={alertIdx} className="bg-red-900/40 border border-red-500 rounded p-1.5">
+                                        <div className="flex items-center gap-1 mb-0.5">
+                                          {getFloodAlertBadge(alert.severity)}
+                                          <span className="text-xs text-red-200">{alert.event}</span>
+                                        </div>
+                                        <p className="text-xs text-red-100">{alert.headline}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-right ml-2">
+                                {getConfidenceBadge(source.confidence)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
 
                   {/* Rejection Reason Input */}
@@ -591,7 +891,7 @@ export default function ParametricInsurance() {
               <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-3" />
               <p className="text-slate-400">No pending payouts at this time</p>
               <p className="text-xs text-slate-500 mt-1">
-                Evaluate policy triggers to check current wind conditions
+                Evaluate policy triggers to check current wind and flood conditions
               </p>
             </CardContent>
           </Card>

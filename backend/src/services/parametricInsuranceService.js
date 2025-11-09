@@ -1,9 +1,11 @@
 import satelliteWindService from './satelliteWindService.js';
+import floodDetectionService from './floodDetectionService.js';
 
 /**
  * Parametric Insurance Service
  * Manages trigger-based insurance policies with multi-source satellite verification
  * and admin approval workflow for payouts
+ * Supports both wind speed and water level (flood) triggers
  */
 class ParametricInsuranceService {
   constructor() {
@@ -66,6 +68,51 @@ class ParametricInsuranceService {
 
     this.policies.set(demoPolicy.id, demoPolicy);
     console.log(`   ✓ Created demo policy: ${demoPolicy.id}`);
+
+    // Create a flood/water level demo policy
+    const floodPolicy = {
+      id: 'POLICY-FLOOD-001',
+      propertyId: 'PROP-LA-001',
+      holder: {
+        name: 'New Orleans Riverside Property',
+        email: 'property@neworleans.com'
+      },
+      location: {
+        lat: 29.9511,
+        lon: -90.0715,
+        address: 'New Orleans, LA'
+      },
+      coverage: {
+        amount: 750000,
+        currency: 'USD',
+        type: 'Flood Damage'
+      },
+      triggers: [
+        {
+          type: 'flood',
+          threshold: 'moderate', // Risk level threshold
+          payout: 150000,
+          description: 'Moderate flood risk'
+        },
+        {
+          type: 'flood',
+          threshold: 'severe',
+          payout: 400000,
+          description: 'Severe flood risk'
+        },
+        {
+          type: 'flood',
+          threshold: 'critical',
+          payout: 750000,
+          description: 'Critical flood risk'
+        }
+      ],
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+
+    this.policies.set(floodPolicy.id, floodPolicy);
+    console.log(`   ✓ Created flood demo policy: ${floodPolicy.id}`);
   }
 
   /**
@@ -228,6 +275,72 @@ class ParametricInsuranceService {
 
         } catch (error) {
           console.log(`   ✗ Error evaluating wind trigger: ${error.message}`);
+          results.triggersEvaluated.push({
+            trigger,
+            error: error.message,
+            activated: false
+          });
+        }
+      } else if (trigger.type === 'flood') {
+        try {
+          // Get flood risk assessment
+          console.log(`\n   📊 Checking trigger: ${trigger.description} (threshold: ${trigger.threshold} risk)`);
+
+          const floodData = await floodDetectionService.getFloodRisk(
+            policy.location.lat,
+            policy.location.lon,
+            new Date()
+          );
+
+          const evaluation = {
+            trigger,
+            floodData,
+            activated: false,
+            reason: null
+          };
+
+          if (floodData.assessment) {
+            const riskLevel = floodData.assessment.riskLevel;
+            const confidence = floodData.assessment.confidence;
+
+            console.log(`   🌊 Flood risk: ${riskLevel.toUpperCase()} (confidence: ${confidence})`);
+            console.log(`   🎯 Threshold: ${trigger.threshold.toUpperCase()} risk`);
+
+            // Determine if trigger activates based on risk level hierarchy
+            const riskHierarchy = ['low', 'minor', 'moderate', 'severe', 'critical'];
+            const currentRiskIndex = riskHierarchy.indexOf(riskLevel);
+            const thresholdIndex = riskHierarchy.indexOf(trigger.threshold);
+
+            // Trigger activated if current risk meets or exceeds threshold
+            if (currentRiskIndex >= thresholdIndex) {
+              evaluation.activated = true;
+              evaluation.reason = `Flood risk ${riskLevel} meets/exceeds threshold ${trigger.threshold}`;
+
+              console.log(`   ⚠️  TRIGGER ACTIVATED: ${evaluation.reason}`);
+
+              // Create pending payout
+              const payout = await this.createPendingPayout(
+                policy,
+                trigger,
+                floodData,
+                eventContext
+              );
+
+              results.triggersActivated.push(evaluation);
+              results.pendingPayouts.push(payout);
+            } else {
+              evaluation.reason = `Flood risk ${riskLevel} below threshold ${trigger.threshold}`;
+              console.log(`   ✓ Threshold not met`);
+            }
+          } else {
+            evaluation.reason = 'No flood data available from sources';
+            console.log(`   ⚠️  No flood assessment available`);
+          }
+
+          results.triggersEvaluated.push(evaluation);
+
+        } catch (error) {
+          console.log(`   ✗ Error evaluating flood trigger: ${error.message}`);
           results.triggersEvaluated.push({
             trigger,
             error: error.message,
