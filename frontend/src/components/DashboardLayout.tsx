@@ -8,7 +8,6 @@ import {
   Plane,
   Zap,
   Map,
-  Bell,
   Menu,
   X,
   Home,
@@ -24,6 +23,11 @@ import {
   Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NotificationDropdown } from "@/components/NotificationDropdown";
+import { NotificationPanel } from "@/components/NotificationPanel";
+import { ProcessingPopup } from "@/components/ProcessingPopup";
+import { useNotifications } from "@/contexts/NotificationContext";
+import { useClaimProcessing } from "@/hooks/useClaimProcessing";
 import bgDesignImage from "@/assets/images/Bg-design1.jpg";
 import bradenImage from "@/assets/images/braden.jpg";
 import richardImage from "@/assets/images/richard.jpg";
@@ -58,6 +62,8 @@ export const DashboardLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const pageTitle = getPageTitle(location.pathname);
+  const { processingState, setProcessingState } = useNotifications();
+  const { isPending } = useClaimProcessing();
 
   return (
     <div 
@@ -541,18 +547,27 @@ export const DashboardLayout = () => {
               <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
                 <Settings className="h-5 w-5" />
               </Button>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-                <Bell className="h-5 w-5" />
-              </Button>
+              <NotificationDropdown />
             </div>
           </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 p-6 overflow-auto relative">
           <Outlet />
+          <NotificationPanel />
         </main>
       </div>
+
+      {/* Global Processing Popup - Visible on all dashboard pages */}
+      <ProcessingPopup 
+        isVisible={processingState.showPopup} 
+        onClose={() => {
+          setProcessingState({ showPopup: false });
+        }}
+        isProcessing={isPending || processingState.isProcessing}
+        error={processingState.error}
+      />
 
       {/* Mobile Overlay */}
       {sidebarOpen && (
