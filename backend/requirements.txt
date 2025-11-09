@@ -1,0 +1,8 @@
+earthengine-api
+python-dotenv
+google-generativeai
+openai
+folium
+fastapi
+pydantic
+uvicorn
