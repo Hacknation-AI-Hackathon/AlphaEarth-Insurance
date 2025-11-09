@@ -97,3 +97,6 @@ api-gateway/.env
 # Node.js Backend
 backend-nodejs/node_modules
 backend-nodejs/.env
+DEPLOYMENT_SUMMARY.md
+DEPLOYMENT_VERCEL.md
+DEPLOYMENT.md

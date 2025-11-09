@@ -1,7 +1,18 @@
 // Frontend/src/lib/api.ts
 // Complete API client for AlphaEarth backend
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+// API base URL - defaults to /api for same-domain requests
+// On Vercel, set VITE_API_URL to the full domain or use relative path
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) {
+    return envUrl;
+  }
+  // Default to relative path for same-domain API calls
+  return "/api";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // ============================================
 // TYPE DEFINITIONS
