@@ -1,300 +1,202 @@
-import { initializeEarthEngine, toGeometry } from './earthEngineService.js';
-import { getImagery } from './preprocessingService.js';
-import { detectHazard } from './hazardDetectionService.js';
-import {
-  crossSensorCheck,
-  meteorologyCheck,
-  spatialCoherenceCheck,
-  computeEmbeddingChangeScore,
-  confidenceScore
-} from './validationService.js';
-import { decideClaim } from './claimDecisionService.js';
-import { summarizeClaimDecision } from './summarizationService.js';
+import axios from 'axios';
+import { initializeEarthEngine } from './earthEngineService.js';
 
-const SUPPORTED_HAZARDS = ['flood', 'wildfire', 'roof'];
-const DEFAULT_SCALES = {
-  flood: 30,
-  wildfire: 30,
-  roof: 10
-};
+// Python Earth Engine Service URL
+const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
 
 /**
  * Initialize Earth Engine if not already initialized
+ * This checks if the Python service is running
  */
-function ensureInitialized() {
+async function ensureInitialized() {
   try {
-    initializeEarthEngine();
+    await initializeEarthEngine();
   } catch (error) {
     console.error('Earth Engine initialization error:', error);
     throw error;
   }
 }
 
-/**
- * Get imagery pair for pre and post events
- * @param {Object} config - Preprocessing configuration
- * @returns {Promise<Object>} - Imagery pair with pre, post, and geometry
- */
-async function getImageryPair(config) {
-  const aoiGeom = toGeometry(config.aoi);
-  const satellite = config.satellite || 'sentinel2';
-  const maxCloud = config.max_cloud !== undefined ? config.max_cloud : 30;
-  const reducer = config.reducer || 'median';
-
-  const pre = await getImagery({
-    aoi: aoiGeom,
-    startDate: config.pre.start,
-    endDate: config.pre.end,
-    satellite: satellite,
-    maxCloud: maxCloud,
-    reducer: reducer
-  });
-
-  const post = await getImagery({
-    aoi: aoiGeom,
-    startDate: config.post.start,
-    endDate: config.post.end,
-    satellite: satellite,
-    maxCloud: maxCloud,
-    reducer: reducer
-  });
-
-  // Verify images have bands
-  const preBands = pre.image.bandNames().getInfo() || [];
-  const postBands = post.image.bandNames().getInfo() || [];
-
-  if (preBands.length === 0) {
-    throw new Error(
-      `No usable imagery found for pre-event window (${config.pre.start} to ${config.pre.end}). ` +
-      `Try expanding the date range or increasing max_cloud.`
-    );
-  }
-
-  if (postBands.length === 0) {
-    throw new Error(
-      `No usable imagery found for post-event window (${config.post.start} to ${config.post.end}). ` +
-      `Try expanding the date range or increasing max_cloud.`
-    );
-  }
-
-  return {
-    pre: pre,
-    post: post,
-    geometry: aoiGeom
-  };
-}
-
-/**
- * Run hazard detection
- * @param {ee.Image} preImg - Pre-event image
- * @param {ee.Image} postImg - Post-event image
- * @param {string} hazardKey - Hazard type
- * @param {number} scale - Scale in meters
- * @param {ee.Geometry} aoiGeom - Area of interest
- * @returns {Promise<Array>} - [hazard_result, mask]
- */
-async function runHazard(preImg, postImg, hazardKey, scale, aoiGeom) {
-  const result = await detectHazard(
-    hazardKey,
-    preImg,
-    postImg,
-    aoiGeom,
-    scale,
-    true // returnMask
-  );
-
-  // detectHazard returns [result, mask] when returnMask is true
-  return Array.isArray(result) ? result : [result, null];
-}
-
-/**
- * Run validation checks
- * @param {ee.Geometry} aoiGeom - Area of interest
- * @param {Array} preWindow - Pre-event date window [start, end]
- * @param {Array} postWindow - Post-event date window [start, end]
- * @param {ee.Image} maskImage - Hazard mask image
- * @param {number} scale - Scale in meters
- * @param {string} hazard - Hazard type
- * @param {ee.Image} preImg - Pre-event image
- * @param {ee.Image} postImg - Post-event image
- * @returns {Promise<Object>} - Validation result
- */
-async function runValidation(
-  aoiGeom,
-  preWindow,
-  postWindow,
-  maskImage,
-  scale,
-  hazard,
-  preImg,
-  postImg
-) {
-  if (!maskImage) {
-    return {
-      cross_sensor: 0.0,
-      meteorology: 0.0,
-      spatial_coherence: 0.0,
-      confidence: {
-        confidence_score: 0.0,
-        label: 'Unknown'
-      }
-    };
-  }
-
-  try {
-    const cross = await crossSensorCheck(aoiGeom, preWindow[0], postWindow[0], scale);
-    const met = await meteorologyCheck(aoiGeom, postWindow, hazard);
-    const coherence = await spatialCoherenceCheck(aoiGeom, maskImage, scale);
-    const embScore = await computeEmbeddingChangeScore(preImg, postImg, aoiGeom);
-    const conf = confidenceScore(cross, met, coherence, embScore);
-
-    return {
-      cross_sensor: Math.round(cross * 100) / 100,
-      meteorology: Math.round(met * 100) / 100,
-      spatial_coherence: Math.round(coherence * 100) / 100,
-      embedding_change: Math.round(embScore * 1000) / 1000,
-      confidence: conf
-    };
-  } catch (error) {
-    console.error('Validation error:', error);
-    return {
-      error: error.message,
-      cross_sensor: 0.0,
-      meteorology: 0.0,
-      spatial_coherence: 0.0,
-      confidence: {
-        confidence_score: 0.0,
-        label: 'Unknown'
-      }
-    };
-  }
-}
-
-/**
- * Evaluate a single hazard type
- * @param {string} hazardKey - Hazard type
- * @param {Object} imagery - Imagery pair
- * @param {Array} preDates - Pre-event dates [start, end]
- * @param {Array} postDates - Post-event dates [start, end]
- * @param {number} scaleOverride - Optional scale override
- * @returns {Promise<Object>} - Evaluation result
- */
-async function evaluateHazard(hazardKey, imagery, preDates, postDates, scaleOverride = null) {
-  const scale = scaleOverride || DEFAULT_SCALES[hazardKey] || 30;
-  
-  const [hazardResult, mask] = await runHazard(
-    imagery.pre.image,
-    imagery.post.image,
-    hazardKey,
-    scale,
-    imagery.geometry
-  );
-
-  const validation = await runValidation(
-    imagery.geometry,
-    preDates,
-    postDates,
-    mask,
-    scale,
-    hazardKey,
-    imagery.pre.image,
-    imagery.post.image
-  );
-
-  const claimResult = decideClaim(hazardResult, validation);
-  const fusedScore = claimResult.fused_score || 0.0;
-
-  return {
-    hazard_key: hazardKey,
-    scale: scale,
-    hazard: hazardResult,
-    validation: validation,
-    claim: claimResult,
-    fused_score: fusedScore
-  };
-}
+// All Earth Engine operations are now handled by the Python service
+// This service acts as a proxy to the Python service
 
 /**
  * Process claim request
+ * Now delegates to Python service for all Earth Engine operations
  * @param {Object} config - Claim processing configuration
  * @returns {Promise<Object>} - Claim processing result
  */
 export async function processClaim(config) {
-  ensureInitialized();
+  console.log('🔧 [SERVICE] Initializing Earth Engine service...');
+  await ensureInitialized();
+  console.log('✅ [SERVICE] Earth Engine service initialized');
 
-  const imagery = await getImageryPair(config.preprocessing);
-  const preDates = [config.preprocessing.pre.start, config.preprocessing.pre.end];
-  const postDates = [config.preprocessing.post.start, config.preprocessing.post.end];
-  
-  const hazardCfg = config.hazard || {};
-  const claimCfg = config.claim || {};
+  console.log('📄 [SERVICE] Processing claim via Python service...');
+  console.log('   Python Service URL:', PYTHON_SERVICE_URL);
+  console.log('   Request Config:');
+  console.log('     - AOI:', config.preprocessing?.aoi);
+  console.log('     - Pre-event:', config.preprocessing?.pre);
+  console.log('     - Post-event:', config.preprocessing?.post);
+  console.log('     - Satellite:', config.preprocessing?.satellite);
+  console.log('     - Max cloud:', config.preprocessing?.max_cloud);
+  console.log('     - Hazard:', config.hazard);
+  console.log('     - Claim options:', config.claim);
+  console.log('   Full config JSON:', JSON.stringify(config, null, 2));
 
-  let candidates;
-  let best;
-
-  if (hazardCfg.hazard) {
-    // Evaluate specific hazard
-    best = await evaluateHazard(
-      hazardCfg.hazard,
-      imagery,
-      preDates,
-      postDates,
-      hazardCfg.scale
-    );
-    candidates = [best];
-  } else {
-    // Evaluate all hazards and pick the best
-    const evaluations = await Promise.all(
-      SUPPORTED_HAZARDS.map(hazardKey =>
-        evaluateHazard(hazardKey, imagery, preDates, postDates, hazardCfg.scale)
-      )
-    );
+  try {
+    const serviceCallStartTime = Date.now();
+    console.log('🌐 [SERVICE] Calling Python service endpoint:', `${PYTHON_SERVICE_URL}/process-claim`);
+    console.log('   Timeout:', '600000ms (10 minutes)');
     
-    candidates = evaluations;
-    best = evaluations.reduce((max, candidate) =>
-      candidate.fused_score > max.fused_score ? candidate : max
+    // Call Python service's process-claim endpoint
+    const response = await axios.post(
+      `${PYTHON_SERVICE_URL}/process-claim`,
+      config,
+      {
+        timeout: 600000, // 10 minutes timeout for claim processing
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
     );
-  }
 
-  const hazardResult = best.hazard;
-  const validation = best.validation;
-  const claimResult = best.claim;
+    const serviceCallDuration = ((Date.now() - serviceCallStartTime) / 1000).toFixed(2);
+    console.log('✅ [SERVICE] Python service responded');
+    console.log('   Response status:', response.status);
+    console.log('   Response duration:', serviceCallDuration, 'seconds');
+    console.log('   Response headers:', JSON.stringify(response.headers, null, 2));
+    console.log('   Response data keys:', Object.keys(response.data || {}));
+    console.log('   Response success:', response.data?.success);
 
-  const response = {
-    hazard: hazardResult,
-    validation: validation,
-    claim: claimResult,
-    ranked_hazards: candidates
-      .sort((a, b) => b.fused_score - a.fused_score)
-      .map(c => ({
-        hazard: c.hazard_key,
-        fused_score: c.fused_score,
-        damage_pct: c.hazard.damage_pct,
-        confidence_label: c.claim.confidence_label
-      }))
-  };
-
-  // Add summary if requested
-  if (claimCfg.include_summary !== false) {
-    try {
-      response.summary = await summarizeClaimDecision(claimResult);
-    } catch (error) {
-      console.error('Summary generation failed:', error);
-      response.summary = 'Summary generation failed. See claim details for information.';
+    if (!response.data.success) {
+      console.error('❌ [SERVICE] Python service returned error');
+      console.error('   Error:', response.data.error);
+      throw new Error(response.data.error || 'Claim processing failed');
     }
-  }
 
-  // Add visualization tiles if requested
-  if (claimCfg.include_tiles !== false) {
-    response.visualization = {
-      pre_tile: imagery.pre.url_template,
-      post_tile: imagery.post.url_template,
-      dataset: imagery.pre.dataset,
-      bands: imagery.pre.vis_params.bands,
-      aoi: config.preprocessing.aoi
+    // Transform Python service response to match expected format
+    const pythonResponse = response.data;
+    console.log('🔄 [SERVICE] Transforming Python service response...');
+    console.log('   Python response structure:', {
+      hasPreprocessing: !!pythonResponse.preprocessing,
+      hasHazard: !!pythonResponse.hazard,
+      hasValidation: !!pythonResponse.validation,
+      hasClaim: !!pythonResponse.claim,
+      hasSummary: !!pythonResponse.summary,
+      keys: Object.keys(pythonResponse)
+    });
+    
+    if (pythonResponse.preprocessing) {
+      console.log('   Preprocessing data:', {
+        hasPre: !!pythonResponse.preprocessing.pre,
+        hasPost: !!pythonResponse.preprocessing.post
+      });
+    }
+    
+    if (pythonResponse.hazard) {
+      console.log('   Hazard data:', {
+        hazard: pythonResponse.hazard.hazard,
+        damage_pct: pythonResponse.hazard.damage_pct,
+        severity: pythonResponse.hazard.severity
+      });
+    }
+    
+    if (pythonResponse.validation) {
+      console.log('   Validation data:', {
+        hasConfidence: !!pythonResponse.validation.confidence,
+        cross_sensor: pythonResponse.validation.cross_sensor,
+        meteorology: pythonResponse.validation.meteorology,
+        spatial_coherence: pythonResponse.validation.spatial_coherence
+      });
+    }
+    
+    if (pythonResponse.claim) {
+      console.log('   Claim data:', {
+        approved: pythonResponse.claim.approved,
+        damage_pct: pythonResponse.claim.damage_pct,
+        confidence: pythonResponse.claim.confidence
+      });
+    }
+    
+    // Build response in the format expected by the frontend
+    const result = {
+      preprocessing: pythonResponse.preprocessing,
+      hazard: pythonResponse.hazard,
+      validation: pythonResponse.validation,
+      claim: pythonResponse.claim,
+      summary: pythonResponse.summary || null,
+      ranked_hazards: pythonResponse.ranked_hazards || [{
+        hazard: pythonResponse.hazard?.hazard || 'flood',
+        fused_score: pythonResponse.claim?.confidence || 0.5,
+        confidence_label: pythonResponse.validation?.confidence?.label || 'medium'
+      }]
     };
-  }
 
-  return response;
+    console.log('✅ [SERVICE] Response transformation completed');
+    console.log('   Result structure:', {
+      hasPreprocessing: !!result.preprocessing,
+      hasHazard: !!result.hazard,
+      hasValidation: !!result.validation,
+      hasClaim: !!result.claim,
+      hasSummary: !!result.summary,
+      rankedHazardsCount: result.ranked_hazards?.length || 0
+    });
+    console.log('   Full result JSON (first 1000 chars):', JSON.stringify(result).substring(0, 1000));
+    console.log('   About to return result from processClaim()...');
+    console.log('   Result type:', typeof result);
+    console.log('   Result is an object?', typeof result === 'object' && result !== null);
+    
+    // Ensure we actually return the result
+    const returnValue = result;
+    console.log('   ✅ Returning result from processClaim()');
+    return returnValue;
+
+  } catch (error) {
+    console.error('❌ [SERVICE] Claim processing failed');
+    console.error('   Error type:', error.constructor.name);
+    console.error('   Error message:', error.message);
+    console.error('   Error code:', error.code);
+    
+    if (error.response) {
+      console.error('   Response status:', error.response.status);
+      console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+    }
+    
+    if (error.request) {
+      console.error('   Request was made but no response received');
+      console.error('   Request config:', {
+        url: error.config?.url,
+        method: error.config?.method,
+        timeout: error.config?.timeout
+      });
+    }
+    
+    console.error('   Error stack:', error.stack);
+    
+    if (error.code === 'ECONNREFUSED') {
+      console.error('   Connection refused - Python service is not running');
+      throw new Error(
+        `Earth Engine Python service is not running.\n\n` +
+        `Please start the Python service:\n` +
+        `1. cd backend/python-service\n` +
+        `2. pip install -r requirements.txt\n` +
+        `3. earthengine authenticate\n` +
+        `4. python earth_engine_service.py\n\n` +
+        `The service should run on ${PYTHON_SERVICE_URL}`
+      );
+    }
+    
+    if (error.code === 'ETIMEDOUT') {
+      console.error('   Request timed out after 10 minutes');
+      throw new Error('Request timed out. The processing is taking longer than expected.');
+    }
+    
+    if (error.response?.data?.error) {
+      console.error('   Python service error:', error.response.data.error);
+      throw new Error(error.response.data.error);
+    }
+    
+    throw error;
+  }
 }
 

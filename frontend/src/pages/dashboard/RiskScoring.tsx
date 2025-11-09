@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Droplets, Flame, Wind, AlertCircle, Download, Mail, MapPin } from "lucide-react";
+import { Search, Droplets, Flame, Wind, AlertCircle, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { RiskMap } from "@/components/RiskMap";
@@ -163,20 +163,10 @@ export default function RiskScoring() {
 
   return (
     <div className="space-y-6" style={{ background: 'transparent', minHeight: '100vh' }}>
-      {/* Header */}
+      {/* Description */}
       <div style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}>
-        <h1 
-          className="text-3xl font-bold mb-2"
-          style={{ 
-            color: 'white',
-            fontFamily: 'Plus Jakarta Display, sans-serif',
-            fontWeight: '700'
-          }}
-        >
-          Real-Time Risk Assessment
-        </h1>
         <p 
-          className="text-sm"
+          className="text-sm mb-4"
           style={{ 
             color: '#A0AEC0',
             fontSize: '14px',
@@ -237,21 +227,33 @@ export default function RiskScoring() {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="flex-1 px-4 py-2 rounded-lg"
+                className="flex-1 px-4 py-2.5 rounded-lg transition-all"
                 style={{
-                  background: 'rgba(26, 31, 55, 0.4)',
+                  background: 'rgba(26, 31, 55, 0.6)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
                   color: 'white',
-                  outline: 'none'
+                  outline: 'none',
+                  fontFamily: 'Plus Jakarta Display, sans-serif',
+                  fontSize: '14px'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = 'rgba(0, 117, 255, 0.5)';
+                  e.target.style.background = 'rgba(26, 31, 55, 0.8)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.target.style.background = 'rgba(26, 31, 55, 0.6)';
                 }}
               />
               <Button 
                 onClick={handleSearch} 
                 disabled={isLoading}
+                className="transition-all hover:opacity-90"
                 style={{
                   background: '#0075FF',
                   color: 'white',
-                  border: 'none'
+                  border: 'none',
+                  fontFamily: 'Plus Jakarta Display, sans-serif'
                 }}
               >
                 <Search className="h-4 w-4 mr-2" />
@@ -268,10 +270,16 @@ export default function RiskScoring() {
                   size="sm"
                   onClick={() => handleCitySelect(city)}
                   disabled={isLoading}
+                  className="transition-all hover:bg-opacity-80"
                   style={{
-                    background: 'rgba(26, 31, 55, 0.4)',
-                    borderColor: 'rgba(255, 255, 255, 0.1)',
-                    color: 'white'
+                    background: selectedCity.name === city 
+                      ? 'rgba(0, 117, 255, 0.2)' 
+                      : 'rgba(26, 31, 55, 0.4)',
+                    borderColor: selectedCity.name === city 
+                      ? 'rgba(0, 117, 255, 0.5)' 
+                      : 'rgba(255, 255, 255, 0.1)',
+                    color: 'white',
+                    fontFamily: 'Plus Jakarta Display, sans-serif'
                   }}
                 >
                   <MapPin className="h-3 w-3 mr-1" />
@@ -285,16 +293,68 @@ export default function RiskScoring() {
 
       {/* Results Area */}
       {isLoading ? (
-        <div className="flex items-center justify-center h-96">
+        <div 
+          className="relative rounded-[20px] overflow-hidden"
+          style={{ 
+            borderRadius: '20px',
+            minHeight: '400px'
+          }}
+        >
+          {/* Background Layer 1 - Backdrop blur */}
           <div 
-            className="animate-spin rounded-full h-12 w-12 border-b-2"
-            style={{ borderColor: '#0075FF' }}
+            style={{
+              width: '100%',
+              height: '100%',
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+              borderRadius: '20px',
+              backdropFilter: 'blur(60px)',
+              zIndex: 1
+            }}
           />
+          
+          {/* Background Layer 2 - Gradient overlay */}
+          <div 
+            style={{
+              width: '100%',
+              height: '100%',
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+              borderRadius: '20px',
+              zIndex: 2
+            }}
+          />
+          
+          {/* Loading Content */}
+          <div className="relative z-10 flex items-center justify-center h-96">
+            <div className="flex flex-col items-center gap-4">
+              <div 
+                className="animate-spin rounded-full h-12 w-12 border-b-2 border-t-2"
+                style={{ 
+                  borderTopColor: '#0075FF',
+                  borderBottomColor: 'rgba(0, 117, 255, 0.2)'
+                }}
+              />
+              <p 
+                className="text-sm"
+                style={{ 
+                  color: '#A0AEC0',
+                  fontFamily: 'Plus Jakarta Display, sans-serif'
+                }}
+              >
+                Analyzing risk data...
+              </p>
+            </div>
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* LEFT PANEL - Risk Scores */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-2 space-y-4 flex flex-col">
             {/* Location Header */}
             <div 
               className="relative"
@@ -670,33 +730,6 @@ export default function RiskScoring() {
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col gap-2">
-              <Button 
-                className="w-full"
-                style={{
-                  background: '#0075FF',
-                  color: 'white',
-                  border: 'none'
-                }}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download Risk Report
-              </Button>
-              <Button 
-                variant="outline" 
-                className="w-full"
-                style={{
-                  background: 'rgba(26, 31, 55, 0.4)',
-                  borderColor: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white'
-                }}
-              >
-                <Mail className="h-4 w-4 mr-2" />
-                Email Quote
-              </Button>
-            </div>
-
             {/* Disclaimer */}
             <div 
               className="relative"
@@ -728,31 +761,84 @@ export default function RiskScoring() {
           </div>
 
           {/* RIGHT PANEL - Map */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 flex flex-col h-full">
             <div 
-              className="relative h-full rounded-[20px] overflow-hidden"
+              className="relative rounded-[20px] overflow-hidden w-full flex flex-col flex-1"
               style={{ 
                 borderRadius: '20px',
-                background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
-                backdropFilter: 'blur(60px)'
+                minHeight: '600px'
               }}
             >
-              <div className="h-[800px] relative">
-                <RiskMap
-                  center={selectedCity.coords}
-                  zoom={12}
-                  riskLevel={selectedCity.overall}
-                />
-                <div 
-                  className="absolute bottom-4 left-4 right-4 flex justify-between text-xs p-2 rounded"
-                  style={{ 
-                    background: 'rgba(26, 31, 55, 0.9)',
-                    backdropFilter: 'blur(10px)',
-                    color: '#A0AEC0'
-                  }}
-                >
-                  <span>Lat: {selectedCity.coords[0].toFixed(4)}°</span>
-                  <span>Lon: {selectedCity.coords[1].toFixed(4)}°</span>
+              {/* Background Layer 1 - Backdrop blur */}
+              <div 
+                className="absolute inset-0"
+                style={{
+                  background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+                  borderRadius: '20px',
+                  backdropFilter: 'blur(60px)',
+                  zIndex: 1
+                }}
+              />
+              
+              {/* Background Layer 2 - Gradient overlay */}
+              <div 
+                className="absolute inset-0"
+                style={{
+                  background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+                  borderRadius: '20px',
+                  zIndex: 2
+                }}
+              />
+              
+              {/* Content */}
+              <div className="relative z-10 p-6 flex flex-col flex-1 min-h-0">
+                {/* Map Header */}
+                <div className="flex justify-between items-center mb-4 flex-shrink-0" style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}>
+                  <h3 
+                    className="text-lg font-bold"
+                    style={{ color: 'white' }}
+                  >
+                    Risk Map View
+                  </h3>
+                  <div 
+                    className="px-3 py-1 rounded-lg text-xs"
+                    style={{ 
+                      background: 'rgba(0, 117, 255, 0.2)',
+                      color: '#0075FF',
+                      border: '1px solid rgba(0, 117, 255, 0.3)'
+                    }}
+                  >
+                    Live Data
+                  </div>
+                </div>
+                
+                {/* Map Container - Expands to fill remaining space */}
+                <div className="relative flex-1 w-full min-h-0">
+                  <RiskMap
+                    center={selectedCity.coords}
+                    zoom={12}
+                    riskLevel={selectedCity.overall}
+                    name={selectedCity.name}
+                    className="w-full h-full"
+                  />
+                  
+                  {/* Coordinates Overlay */}
+                  <div 
+                    className="absolute bottom-4 left-4 right-4 flex justify-between text-xs p-3 rounded-lg z-20"
+                    style={{ 
+                      background: 'rgba(26, 31, 55, 0.9)',
+                      backdropFilter: 'blur(10px)',
+                      color: '#A0AEC0',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}
+                  >
+                    <span style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}>
+                      Lat: {selectedCity.coords[0].toFixed(4)}°
+                    </span>
+                    <span style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}>
+                      Lon: {selectedCity.coords[1].toFixed(4)}°
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

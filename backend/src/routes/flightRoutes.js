@@ -337,4 +337,39 @@ router.get('/statistics', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/flight/analyze
+ * Analyze flight delay risk for a specific flight route
+ */
+router.post('/analyze', async (req, res) => {
+  try {
+    const flightInfo = req.body;
+    
+    // Validate required fields (only origin is required)
+    if (!flightInfo.origin_code) {
+      return res.status(400).json({
+        success: false,
+        error: 'Origin airport code is required'
+      });
+    }
+
+    if (!flightInfo.origin_coords) {
+      return res.status(400).json({
+        success: false,
+        error: 'Origin coordinates are required'
+      });
+    }
+
+    const analysis = await flightDelayService.analyzeFlightDelay(flightInfo);
+    
+    res.json(analysis);
+  } catch (error) {
+    console.error('Error analyzing flight delay:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router;

@@ -71,16 +71,16 @@ export interface ClaimProcessingResponse {
 export interface FlightDelayRequest {
   origin_code: string;
   origin_coords: [number, number];
-  dest_code: string;
-  dest_coords: [number, number];
   departure_date: string;
-  departure_time: string;
-  flight_duration_hours: number;
-  departure_airport?: string;  // ADD this
-  arrival_airport?: string;    // ADD this
-  scheduled_departure?: string; // ADD this
-  carrier?: string;            // ADD this
-  flight_number?: string;      // ADD this
+  dest_code?: string;
+  dest_coords?: [number, number];
+  departure_time?: string;
+  flight_duration_hours?: number;
+  departure_airport?: string;
+  arrival_airport?: string;
+  scheduled_departure?: string;
+  carrier?: string;
+  flight_number?: string;
 }
 
 export interface FlightDelayResponse {
@@ -98,19 +98,19 @@ export interface FlightDelayResponse {
       wind_speed_mph: number;
       has_storm: boolean;
     };
-    destination: {
+    destination?: {
       precipitation_mm: number;
       wind_speed_mph: number;
       has_storm: boolean;
     };
-    route: {
+    route?: {
       route_precipitation_mm: number;
       has_storm_along_route: boolean;
     };
   };
   congestion: {
     origin: number;
-    destination: number;
+    destination?: number;
   };
 }
 
@@ -200,10 +200,13 @@ class ApiClient {
 
   async healthCheck(): Promise<HealthCheckResponse> {
     try {
-      return await this.request<HealthCheckResponse>("/health", {}, 0.083);
+      // Use /api/health endpoint explicitly to match backend route
+      return await this.request<HealthCheckResponse>("/health", {}, 1); // 1 minute timeout
     } catch (error) {
       console.error("Health check failed:", error);
-      throw new Error("Backend is unavailable");
+      // Provide more detailed error message
+      const errorMessage = error instanceof Error ? error.message : "Backend is unavailable";
+      throw new Error(`Health check failed: ${errorMessage}`);
     }
   }
 
@@ -279,6 +282,20 @@ class ApiClient {
     return await this.request<any>("/analysis/wildfire", {
       method: "POST",
       body: JSON.stringify({ fireId, region, numProperties }),
+    }, 3);
+  }
+
+  async analyzeEarthquake(earthquakeId: string, region: string = 'california', radius: number = 100) {
+    return await this.request<any>("/analysis/earthquake", {
+      method: "POST",
+      body: JSON.stringify({ earthquakeId, region, radius }),
+    }, 3);
+  }
+
+  async analyzeSevereWeather(alertId: string, region: string = 'southeast', radius: number = 75) {
+    return await this.request<any>("/analysis/severe-weather", {
+      method: "POST",
+      body: JSON.stringify({ alertId, region, radius }),
     }, 3);
   }
 
@@ -595,15 +612,30 @@ class ApiClient {
     }
   }
 
-  // ============================================
-  // FLIGHT DELAY ANALYSIS (EXISTING - kept for compatibility)
-  // ============================================
-
   async analyzeFlightDelay(request: FlightDelayRequest): Promise<FlightDelayResponse> {
-    return await this.request<FlightDelayResponse>("/analyze_flight_delay", {
+    return await this.request<FlightDelayResponse>("/flight/analyze", {
       method: "POST",
       body: JSON.stringify(request),
     });
+  }
+
+  // ============================================
+  // DEMO / LOCATION ASSESSMENT
+  // ============================================
+
+  async assessLocation(data: {
+    lat?: number;
+    lon?: number;
+    location?: string;
+  }) {
+    return await this.request<any>("/demo/assess", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getDemoLocations() {
+    return await this.request<any>("/demo/locations");
   }
 }
 

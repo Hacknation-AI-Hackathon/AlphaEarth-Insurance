@@ -1,4 +1,4 @@
-import { ee, toGeometry } from './earthEngineService.js';
+import { toGeometry, getImageryFromPython } from './earthEngineService.js';
 
 /**
  * Mask clouds for Sentinel-2 SR using SCL band
@@ -84,100 +84,30 @@ export async function getImagery(params) {
     reducer = 'median'
   } = params;
 
+  // Validate AOI format
   const geom = toGeometry(aoi);
-  const sat = satellite.toLowerCase();
 
-  let dataset, collection, defaultBands, defaultMin, defaultMax;
+  // Call Python service to get imagery
+  const result = await getImageryFromPython({
+    aoi: geom,
+    startDate,
+    endDate,
+    satellite,
+    maxCloud,
+    reducer
+  });
 
-  if (sat === 'sentinel2') {
-    dataset = 'COPERNICUS/S2_SR_HARMONIZED';
-    collection = ee.ImageCollection(dataset)
-      .filterBounds(geom)
-      .filterDate(startDate, endDate)
-      .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', maxCloud))
-      .map(maskS2SRSCL);
-    defaultBands = ['B4', 'B3', 'B2']; // RGB
-    defaultMin = 0.02;
-    defaultMax = 0.3;
-  } else if (sat === 'landsat8') {
-    dataset = 'LANDSAT/LC08/C02/T1_L2';
-    collection = ee.ImageCollection(dataset)
-      .filterBounds(geom)
-      .filterDate(startDate, endDate)
-      .map(maskLandsatL2);
-    defaultBands = ['SR_B4', 'SR_B3', 'SR_B2']; // RGB
-    defaultMin = 0.02;
-    defaultMax = 0.3;
-  } else if (sat === 'landsat9') {
-    dataset = 'LANDSAT/LC09/C02/T1_L2';
-    collection = ee.ImageCollection(dataset)
-      .filterBounds(geom)
-      .filterDate(startDate, endDate)
-      .map(maskLandsatL2);
-    defaultBands = ['SR_B4', 'SR_B3', 'SR_B2'];
-    defaultMin = 0.02;
-    defaultMax = 0.3;
-  } else if (sat === 'modis') {
-    dataset = 'MODIS/061/MOD09GA';
-    collection = ee.ImageCollection(dataset)
-      .filterBounds(geom)
-      .filterDate(startDate, endDate)
-      .map(scaleModisSR);
-    defaultBands = ['sur_refl_b01', 'sur_refl_b04', 'sur_refl_b03'];
-    defaultMin = 0.02;
-    defaultMax = 0.3;
-  } else {
-    throw new Error("Unsupported satellite. Use 'sentinel2', 'landsat8', 'landsat9', or 'modis'.");
-  }
-
-  // Reduce to a single image
-  let image;
-  if (reducer === 'median') {
-    image = collection.median().clip(geom);
-  } else if (reducer === 'mosaic') {
-    image = collection.mosaic().clip(geom);
-  } else {
-    throw new Error("Unsupported reducer. Use 'median' or 'mosaic'.");
-  }
-
-  // Check if image has bands
-  const bands = image.bandNames().getInfo() || [];
-  if (bands.length === 0) {
-    throw new Error(
-      `No usable imagery found for date range ${startDate} to ${endDate}. ` +
-      `Try expanding the date range or increasing max_cloud.`
-    );
-  }
-
-  // Visualization parameters
-  const visParams = {
-    bands: defaultBands,
-    min: defaultMin,
-    max: defaultMax
-  };
-
-  // Server-side visualization and tile URL template
-  // Note: Earth Engine tile URL generation in Node.js
-  const visImg = image.visualize(visParams);
-  
-  // Get map ID for tile URL generation
-  // In Node.js Earth Engine API, we need to use ee.data.getMapId
-  let urlTemplate;
-  try {
-    // Try to get map ID synchronously (works for server-side)
-    const mapId = visImg.getMapId(visParams);
-    urlTemplate = mapId.urlFormat || mapId.tile_fetcher?.url_format;
-  } catch (error) {
-    // Fallback: Generate a placeholder URL that will be replaced by Earth Engine client
-    console.warn('Could not generate tile URL template:', error.message);
-    urlTemplate = null; // Frontend will need to request tiles differently
-  }
-
+  // Return in the format expected by the rest of the code
+  // The Python service returns the data we need
   return {
-    image: image,
-    dataset: dataset,
-    vis_params: visParams,
-    url_template: urlTemplate
+    image: {
+      bandNames: () => ({ getInfo: () => result.image.bands }),
+      // Add other methods that might be called
+    },
+    dataset: result.image.dataset,
+    vis_params: result.vis_params,
+    url_template: result.url_template,
+    map_id: result.map_id
   };
 }
 

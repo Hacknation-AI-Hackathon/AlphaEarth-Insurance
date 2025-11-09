@@ -1,0 +1,7 @@
+flask
+flask-cors
+earthengine-api
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+

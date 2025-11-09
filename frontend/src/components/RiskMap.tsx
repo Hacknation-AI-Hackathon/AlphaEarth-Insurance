@@ -1,6 +1,3 @@
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { MapPin } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 interface RiskMapProps {
@@ -11,9 +8,10 @@ interface RiskMapProps {
   center?: [number, number];
   zoom?: number;
   riskLevel?: number;
+  className?: string;
 }
 
-export const RiskMap = ({ lat, lon, name, riskScore, center, zoom = 11, riskLevel }: RiskMapProps) => {
+export const RiskMap = ({ lat, lon, name, riskScore, center, zoom = 11, riskLevel, className = "" }: RiskMapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
 
@@ -48,6 +46,7 @@ export const RiskMap = ({ lat, lon, name, riskScore, center, zoom = 11, riskLeve
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(map);
 
       const marker = L.marker(mapCenter as [number, number]).addTo(map);
@@ -81,25 +80,6 @@ export const RiskMap = ({ lat, lon, name, riskScore, center, zoom = 11, riskLeve
   }, [mapCenter, zoom, displayName, displayRisk]);
 
   return (
-    <Card className="p-6 overflow-hidden">
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <Badge variant="secondary">
-            <MapPin className="mr-1 h-3 w-3" />
-            Satellite View
-          </Badge>
-          <Badge variant="secondary">Live Data</Badge>
-        </div>
-        
-        <div ref={mapRef} className="w-full h-[500px] rounded-lg overflow-hidden border" />
-
-        {(lat || center) && (
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Lat: {(center ? center[0] : lat)?.toFixed(4)}°</span>
-            <span>Lon: {(center ? center[1] : lon)?.toFixed(4)}°</span>
-          </div>
-        )}
-      </div>
-    </Card>
+    <div ref={mapRef} className={`w-full h-full rounded-lg overflow-hidden ${className}`} />
   );
 };

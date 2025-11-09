@@ -572,6 +572,243 @@ class RiskAssessmentService {
 
     return Math.min(baseProbability, 0.95);
   }
+
+  /**
+   * Assess location risk for demo page
+   * Calculates flood, wildfire, and storm risk percentages for a given location
+   */
+  assessLocationRisk(lat, lon) {
+    // Flood risk calculation based on location characteristics
+    const floodRisk = this.calculateFloodRisk(lat, lon);
+    
+    // Wildfire risk calculation
+    const wildfireRisk = this.calculateWildfireRisk(lat, lon);
+    
+    // Storm risk calculation
+    const stormRisk = this.calculateStormRisk(lat, lon);
+
+    return {
+      flood: Math.round(floodRisk * 100),
+      wildfire: Math.round(wildfireRisk * 100),
+      storm: Math.round(stormRisk * 100),
+      overall: Math.round(((floodRisk + wildfireRisk + stormRisk) / 3) * 100)
+    };
+  }
+
+  /**
+   * Calculate flood risk based on location
+   */
+  calculateFloodRisk(lat, lon) {
+    let risk = 0.1; // Base risk
+
+    // Coastal areas (within ~50 miles of coast)
+    // Rough approximation: check if near major coastlines
+    const isCoastal = this.isNearCoast(lat, lon);
+    if (isCoastal) {
+      risk += 0.4;
+    }
+
+    // Low elevation areas (approximation based on known low-lying regions)
+    if (lat >= 25 && lat <= 30 && lon >= -85 && lon <= -80) {
+      // Florida area - low elevation
+      risk += 0.3;
+    }
+    if (lat >= 29 && lat <= 31 && lon >= -96 && lon <= -94) {
+      // Houston area - flood prone
+      risk += 0.35;
+    }
+    if (lat >= 40 && lat <= 41 && lon >= -75 && lon <= -73) {
+      // NYC area - coastal
+      risk += 0.25;
+    }
+
+    // River valleys (approximation)
+    if (lon >= -91 && lon <= -89 && lat >= 38 && lat <= 40) {
+      // Mississippi River area
+      risk += 0.2;
+    }
+
+    return Math.min(risk, 0.95);
+  }
+
+  /**
+   * Calculate wildfire risk based on location
+   */
+  calculateWildfireRisk(lat, lon) {
+    let risk = 0.05; // Base risk
+
+    // Western US - high wildfire risk
+    if (lon >= -125 && lon <= -105 && lat >= 32 && lat <= 49) {
+      // Western states
+      risk += 0.35;
+      
+      // California specifically
+      if (lat >= 32 && lat <= 42 && lon >= -125 && lon <= -114) {
+        risk += 0.15;
+      }
+      
+      // Colorado, Arizona, New Mexico
+      if (lat >= 31 && lat <= 41 && lon >= -110 && lon <= -102) {
+        risk += 0.2;
+      }
+    }
+
+    // Texas (western parts)
+    if (lat >= 29 && lat <= 36 && lon >= -106 && lon <= -98) {
+      risk += 0.15;
+    }
+
+    // Florida (occasional wildfires)
+    if (lat >= 25 && lat <= 31 && lon >= -87 && lon <= -80) {
+      risk += 0.05;
+    }
+
+    // Forested areas (rough approximation)
+    // Pacific Northwest
+    if (lat >= 45 && lat <= 49 && lon >= -125 && lon <= -116) {
+      risk += 0.1;
+    }
+
+    return Math.min(risk, 0.95);
+  }
+
+  /**
+   * Calculate storm risk based on location
+   */
+  calculateStormRisk(lat, lon) {
+    let risk = 0.1; // Base risk
+
+    // Hurricane-prone areas (Gulf Coast and Atlantic Coast)
+    if (lat >= 25 && lat <= 35) {
+      // Southern coastal states
+      if (lon >= -98 && lon <= -80) {
+        // Gulf and Atlantic coasts
+        risk += 0.4;
+        
+        // Florida - very high storm risk
+        if (lat >= 24 && lat <= 31 && lon >= -87 && lon <= -80) {
+          risk += 0.2;
+        }
+        
+        // Gulf Coast (Texas to Florida)
+        if (lon >= -98 && lon <= -88 && lat >= 25 && lat <= 30) {
+          risk += 0.15;
+        }
+      }
+    }
+
+    // Tornado Alley (Central US)
+    if (lat >= 30 && lat <= 43 && lon >= -105 && lon <= -85) {
+      risk += 0.25;
+    }
+
+    // Northeast - winter storms and nor'easters
+    if (lat >= 40 && lat <= 45 && lon >= -75 && lon <= -70) {
+      risk += 0.15;
+    }
+
+    // Midwest - severe thunderstorms
+    if (lat >= 37 && lat <= 45 && lon >= -95 && lon <= -85) {
+      risk += 0.2;
+    }
+
+    return Math.min(risk, 0.95);
+  }
+
+  /**
+   * Check if location is near coast (rough approximation)
+   */
+  isNearCoast(lat, lon) {
+    // East Coast
+    if (lat >= 25 && lat <= 45 && lon >= -81 && lon <= -66) {
+      return true;
+    }
+    
+    // Gulf Coast
+    if (lat >= 25 && lat <= 31 && lon >= -98 && lon <= -81) {
+      return true;
+    }
+    
+    // West Coast
+    if (lat >= 32 && lat <= 49 && lon >= -125 && lon <= -117) {
+      return true;
+    }
+    
+    // Great Lakes (storm surge risk)
+    if ((lat >= 41 && lat <= 48 && lon >= -92 && lon <= -76) ||
+        (lat >= 41 && lat <= 47 && lon >= -90 && lon <= -82)) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Get location info (name, population estimate) for coordinates
+   */
+  getLocationInfo(lat, lon) {
+    // Known cities lookup (can be expanded or use geocoding API)
+    const cities = [
+      { name: 'San Francisco, CA', lat: 37.7749, lon: -122.4194, population: '873,965' },
+      { name: 'Miami, FL', lat: 25.7617, lon: -80.1918, population: '442,241' },
+      { name: 'Houston, TX', lat: 29.7604, lon: -95.3698, population: '2,304,580' },
+      { name: 'New York, NY', lat: 40.7128, lon: -74.0060, population: '8,336,817' },
+      { name: 'Los Angeles, CA', lat: 34.0522, lon: -118.2437, population: '3,898,747' },
+      { name: 'Chicago, IL', lat: 41.8781, lon: -87.6298, population: '2,746,388' },
+      { name: 'Phoenix, AZ', lat: 33.4484, lon: -112.0740, population: '1,608,139' },
+      { name: 'Philadelphia, PA', lat: 39.9526, lon: -75.1652, population: '1,603,797' },
+    ];
+
+    // Find nearest city within 50 miles
+    let nearestCity = null;
+    let minDistance = Infinity;
+
+    cities.forEach(city => {
+      const distance = turf.distance(
+        turf.point([lon, lat]),
+        turf.point([city.lon, city.lat]),
+        { units: 'miles' }
+      );
+      
+      if (distance < 50 && distance < minDistance) {
+        minDistance = distance;
+        nearestCity = city;
+      }
+    });
+
+    if (nearestCity) {
+      return {
+        name: nearestCity.name,
+        population: nearestCity.population,
+        description: this.getLocationDescription(nearestCity.name)
+      };
+    }
+
+    // Default fallback
+    return {
+      name: `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+      population: 'Unknown',
+      description: 'Custom location'
+    };
+  }
+
+  /**
+   * Get location description
+   */
+  getLocationDescription(cityName) {
+    const descriptions = {
+      'San Francisco, CA': 'Coastal city with moderate climate risks',
+      'Miami, FL': 'High flood and storm risk coastal area',
+      'Houston, TX': 'Urban area with significant flood risk',
+      'New York, NY': 'Coastal metropolitan area with storm risk',
+      'Los Angeles, CA': 'Coastal city with wildfire and earthquake risk',
+      'Chicago, IL': 'Midwestern city with severe weather risk',
+      'Phoenix, AZ': 'Desert city with wildfire and heat risk',
+      'Philadelphia, PA': 'Northeastern city with storm risk'
+    };
+    
+    return descriptions[cityName] || 'Location with varying climate risks';
+  }
 }
 
 export default new RiskAssessmentService();

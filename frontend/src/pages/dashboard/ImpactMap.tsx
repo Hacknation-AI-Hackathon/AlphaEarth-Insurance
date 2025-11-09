@@ -1,43 +1,263 @@
 import { Button } from "@/components/ui/button";
-import { RefreshCw, FileText, Bell, Mail } from "lucide-react";
+import { RefreshCw, AlertTriangle, Flame, Wind, Cloud, Zap, Loader2 } from "lucide-react";
 import { useActiveDisasters, useHurricanes, useWildfires, useActiveEarthquakes, useActiveSevereWeather } from "@/hooks/useDisasters";
-import { usePropertiesInRegion } from "@/hooks/useProperties";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { apiClient } from "@/lib/api";
+import { useMutation } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { DisasterImpactPopup } from "@/components/DisasterImpactPopup";
 
 export default function ImpactMap() {
   // Fetch real disaster data
-  const { data: disastersData, isLoading: disastersLoading, refetch: refetchDisasters } = useActiveDisasters();
-  const { data: hurricanesData, isLoading: hurricanesLoading } = useHurricanes();
-  const { data: wildfiresData, isLoading: wildfiresLoading } = useWildfires();
-  const { data: earthquakesData, isLoading: earthquakesLoading } = useActiveEarthquakes();
-  const { data: severeWeatherData, isLoading: severeWeatherLoading } = useActiveSevereWeather();
+  const { refetch: refetchDisasters } = useActiveDisasters();
+  const { data: hurricanesData, isLoading: hurricanesLoading, refetch: refetchHurricanes } = useHurricanes();
+  const { data: wildfiresData, isLoading: wildfiresLoading, refetch: refetchWildfires } = useWildfires();
+  const { data: earthquakesData, isLoading: earthquakesLoading, refetch: refetchEarthquakes } = useActiveEarthquakes();
+  const { data: severeWeatherData, isLoading: severeWeatherLoading, refetch: refetchSevereWeather } = useActiveSevereWeather();
+  const { toast } = useToast();
 
-  // Default center on USA or first disaster location
-  const [mapCenter, setMapCenter] = useState<[number, number]>([37.7749, -95.0]);
-  
-  // Fetch properties near disasters
-  const { data: propertiesData } = usePropertiesInRegion(mapCenter[0], mapCenter[1], 100);
+  // State for selected disaster and analysis results
+  const [selectedDisaster, setSelectedDisaster] = useState<any>(null);
+  const [analysisData, setAnalysisData] = useState<any>(null);
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
 
-  // Log all disaster data to console
-  console.log("Impact Map Data:", {
-    allDisasters: disastersData?.data || [],
-    hurricanes: hurricanesData?.data || [],
-    wildfires: wildfiresData?.data || [],
-    earthquakes: earthquakesData?.data || [],
-    severeWeather: severeWeatherData?.data || [],
-    properties: propertiesData?.data || []
+  // Check if any data is loading
+  const isLoading = hurricanesLoading || wildfiresLoading || earthquakesLoading || severeWeatherLoading;
+
+  // Combine all disasters
+  const allDisasters = useMemo(() => {
+    const disasters: any[] = [];
+    
+    // Debug logging
+    console.log("Impact Map - Disaster Data:", {
+      hurricanes: hurricanesData,
+      wildfires: wildfiresData,
+      earthquakes: earthquakesData,
+      severeWeather: severeWeatherData
+    });
+    
+    // Add hurricanes
+    if (hurricanesData?.data && Array.isArray(hurricanesData.data)) {
+      hurricanesData.data.forEach((h: any) => {
+        disasters.push({
+          ...h,
+          type: 'hurricane',
+          icon: Wind,
+          statusTags: ['mock'],
+          name: h.name || `Hurricane ${h.id}`,
+          location: h.location || h.region || 'Unknown',
+          isRealTime: false
+        });
+      });
+    }
+    
+    // Add wildfires
+    if (wildfiresData?.data && Array.isArray(wildfiresData.data)) {
+      wildfiresData.data.forEach((w: any, idx: number) => {
+        disasters.push({
+          ...w,
+          type: 'wildfire',
+          icon: Flame,
+          statusTags: ['mock'],
+          name: w.name || `Active Fire ${idx + 1}`,
+          location: w.location || w.region || 'United States',
+          isRealTime: false
+        });
+      });
+    }
+    
+    // Add earthquakes - only keep one (the oldest one to remove the duplicate)
+    if (earthquakesData?.data && Array.isArray(earthquakesData.data) && earthquakesData.data.length > 0) {
+      // Sort earthquakes by date (oldest first) and take only the first one (oldest)
+      const sortedEarthquakes = [...earthquakesData.data].sort((a, b) => {
+        const dateA = new Date(a.time || a.timestamp || 0);
+        const dateB = new Date(b.time || b.timestamp || 0);
+        return dateA.getTime() - dateB.getTime(); // Oldest first
+      });
+      
+      // Take only the oldest earthquake (first in sorted array)
+      const e = sortedEarthquakes[0];
+      
+      // Format earthquake title - simple format with magnitude only
+      let earthquakeTitle = 'Earthquake';
+      
+      // Use magnitude if available, otherwise just "Earthquake"
+      if (e.mag) {
+        earthquakeTitle = `M ${e.mag} Earthquake`;
+      }
+      
+      disasters.push({
+        ...e,
+        type: 'earthquake',
+        icon: AlertTriangle,
+        statusTags: ['active'],
+        name: earthquakeTitle,
+        location: e.place || 'Unknown',
+        isRealTime: true
+      });
+    }
+    
+    // Add severe weather
+    if (severeWeatherData?.data && Array.isArray(severeWeatherData.data)) {
+      severeWeatherData.data.forEach((s: any) => {
+        // Format flood/severe weather title - extract just the warning type
+        let weatherTitle = 'Severe Weather Warning';
+        
+        if (s.headline) {
+          // Extract warning type by splitting on "issued" or "by"
+          // Example: "Flood Warning issued November 8 at 8:01PM EST by NWS Melbourne FL"
+          // Result: "Flood Warning"
+          
+          let cleanHeadline = s.headline.trim();
+          
+          // Split on "issued" - take the part before it
+          if (cleanHeadline.toLowerCase().includes('issued')) {
+            const parts = cleanHeadline.split(/issued/i);
+            cleanHeadline = parts[0].trim();
+          }
+          
+          // Split on "by" - take the part before it
+          if (cleanHeadline.toLowerCase().includes(' by ')) {
+            const parts = cleanHeadline.split(/\s+by\s+/i);
+            cleanHeadline = parts[0].trim();
+          }
+          
+          // Use the cleaned headline as the title
+          if (cleanHeadline && cleanHeadline.length > 0) {
+            weatherTitle = cleanHeadline;
+            
+            // If still too long, truncate
+            if (weatherTitle.length > 50) {
+              weatherTitle = weatherTitle.substring(0, 47).trim() + '...';
+            }
+          }
+        }
+        
+        disasters.push({
+          ...s,
+          type: 'severe-weather',
+          icon: Cloud,
+          statusTags: ['active'],
+          name: weatherTitle,
+          location: s.areaDesc || 'Unknown',
+          isRealTime: true
+        });
+      });
+    }
+    
+    console.log("Impact Map - Combined Disasters:", disasters.length);
+    
+    // Sort: real-time disasters (earthquakes and severe-weather) first, then by date
+    return disasters.sort((a, b) => {
+      // Prioritize real-time disasters
+      const aIsRealTime = a.isRealTime || a.type === 'earthquake' || a.type === 'severe-weather';
+      const bIsRealTime = b.isRealTime || b.type === 'earthquake' || b.type === 'severe-weather';
+      
+      if (aIsRealTime && !bIsRealTime) return -1;
+      if (!aIsRealTime && bIsRealTime) return 1;
+      
+      // Within same category, sort by date
+      const dateA = new Date(a.lastUpdated || a.timestamp || a.time || 0);
+      const dateB = new Date(b.lastUpdated || b.timestamp || b.time || 0);
+      return dateB.getTime() - dateA.getTime();
+    });
+  }, [hurricanesData, wildfiresData, earthquakesData, severeWeatherData]);
+
+  // Handle analyze impact
+  const analyzeImpact = useMutation({
+    mutationFn: async (disaster: any) => {
+      if (disaster.type === 'hurricane') {
+        return await apiClient.analyzeHurricane(disaster.id, disaster.location || 'gulf-coast', 5000);
+      } else if (disaster.type === 'wildfire') {
+        return await apiClient.analyzeWildfire(disaster.id, disaster.location || 'california', 5000);
+      } else if (disaster.type === 'earthquake') {
+        return await apiClient.analyzeEarthquake(disaster.id, 'california', 100);
+      } else if (disaster.type === 'severe-weather') {
+        // Extract region from location or use default
+        const region = disaster.location && disaster.location !== 'Unknown' 
+          ? disaster.location.toLowerCase().replace(/\s+/g, '-')
+          : 'southeast';
+        return await apiClient.analyzeSevereWeather(disaster.id, region, 75);
+      } else {
+        throw new Error('Analysis not available for this disaster type');
+      }
+    },
+    onSuccess: (data) => {
+      setAnalysisData(data?.data);
+      setIsPopupOpen(true);
+      toast({
+        title: "Analysis Complete",
+        description: "Impact analysis completed successfully!",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Analysis Failed",
+        description: error instanceof Error ? error.message : "Failed to analyze disaster impact",
+        variant: "destructive",
+      });
+    }
   });
 
-  // Calculate real counts from backend data
-  const criticalCount = hurricanesData?.count || 0;
-  const highRiskCount = wildfiresData?.count || 0;
-  const moderateCount = earthquakesData?.count || 0;
-  const lowRiskCount = severeWeatherData?.count || 0;
-  const totalAffectedProperties = propertiesData?.count || 0;
+  const handleAnalyzeImpact = (disaster: any) => {
+    setSelectedDisaster(disaster);
+    analyzeImpact.mutate(disaster);
+  };
+
+
+  // Format date
+  const formatDate = (dateString: string | number | undefined) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      month: 'numeric',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
+  // Get disaster icon component
+  const getDisasterIcon = (disaster: any) => {
+    if (disaster.icon) return disaster.icon;
+    if (disaster.type === 'hurricane') return Wind;
+    if (disaster.type === 'wildfire') return Flame;
+    if (disaster.type === 'earthquake') return AlertTriangle;
+    if (disaster.type === 'severe-weather') return Cloud;
+    return AlertTriangle;
+  };
+
+  // Get status tag color
+  const getStatusTagColor = (tag: string) => {
+    switch (tag.toLowerCase()) {
+      case 'active':
+        return { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.3)', color: '#22C55E' };
+      case 'critical':
+        return { bg: 'rgba(156, 163, 175, 0.2)', border: 'rgba(156, 163, 175, 0.3)', color: '#9CA3AF' };
+      case 'mock':
+        return { bg: 'rgba(239, 68, 68, 0.2)', border: 'rgba(239, 68, 68, 0.3)', color: '#EF4444' };
+      case 'warning':
+        return { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.3)', color: '#22C55E' };
+      default:
+        return { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.3)', color: '#94A3B8' };
+    }
+  };
+
 
   // Handle refresh
   const handleRefresh = () => {
     refetchDisasters();
+    refetchHurricanes();
+    refetchWildfires();
+    refetchEarthquakes();
+    refetchSevereWeather();
+    toast({
+      title: "Refreshing Data",
+      description: "Fetching latest disaster information...",
+    });
   };
   return (
     <div className="space-y-6" style={{ background: 'transparent', minHeight: '100vh' }}>
@@ -62,534 +282,292 @@ export default function ImpactMap() {
               fontFamily: 'Plus Jakarta Display, sans-serif'
             }}
           >
-            Real-time property exposure tracking
+            Real-time risk assessment and financial exposure analysis for active disasters using satellite intelligence and AI.
           </p>
         </div>
-      </div>
-
-      {/* Event Selector */}
-      <div 
-        className="relative"
-        style={{ 
-          borderRadius: '20px',
-          overflow: 'hidden'
-        }}
-      >
-        {/* Background Layer 1 - Backdrop blur */}
-        <div 
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
-            borderRadius: '20px',
-            backdropFilter: 'blur(60px)',
-            zIndex: 1
-          }}
-        />
-        
-        {/* Background Layer 2 - Gradient overlay */}
-        <div 
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
-            borderRadius: '20px',
-            zIndex: 2
-          }}
-        />
-        
-        {/* Content */}
-        <div 
-          className="relative z-10 p-4"
-          style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex-1 min-w-[300px]">
-              <select 
-                className="w-full px-3 py-2 rounded-lg"
-                style={{
-                  background: 'rgba(26, 31, 55, 0.4)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: 'white',
-                  outline: 'none'
-                }}
-              >
-                <option style={{ background: '#1A1F37' }}>Hurricane Elena | Category 4 | Oct 15, 2024</option>
-                <option style={{ background: '#1A1F37' }}>Hurricane Delta | Category 3 | Sep 28, 2024</option>
-                <option style={{ background: '#1A1F37' }}>Tropical Storm Charlie | Jul 12, 2024</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <span 
-                className="text-sm"
-                style={{ color: '#A0AEC0' }}
-              >
-                Last updated: 2 minutes ago
-              </span>
-              <Button 
-                size="sm" 
-                variant="outline"
-                style={{
-                  background: 'rgba(26, 31, 55, 0.4)',
-                  borderColor: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white'
-                }}
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Large Map Placeholder */}
-      <div 
-        className="relative"
-        style={{ 
-          borderRadius: '20px',
-          overflow: 'hidden'
-        }}
-      >
-        {/* Background Layer 1 - Backdrop blur */}
-        <div 
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
-            borderRadius: '20px',
-            backdropFilter: 'blur(60px)',
-            zIndex: 1
-          }}
-        />
-        
-        {/* Background Layer 2 - Gradient overlay */}
-        <div 
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
-            borderRadius: '20px',
-            zIndex: 2
-          }}
-        />
-        
-        {/* Content */}
-        <div 
-          className="relative z-10 p-6"
-          style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
-        >
-          <div 
-            className="h-[500px] rounded-lg relative"
-            style={{ 
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(249, 115, 22, 0.1) 50%, rgba(239, 68, 68, 0.1) 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
-            }}
-          >
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <p 
-                  className="text-lg font-medium mb-1"
-                  style={{ color: 'white' }}
-                >
-                  Interactive Disaster Map
-                </p>
-                <p 
-                  className="text-sm"
-                  style={{ color: '#A0AEC0' }}
-                >
-                  Hurricane path, storm cone, and property risk zones
-                </p>
-              </div>
-            </div>
-
-            {/* Map Legend Overlay */}
-            <div 
-              className="absolute top-4 right-4 rounded-lg p-4 space-y-2 min-w-[200px]"
-              style={{
-                background: 'rgba(26, 31, 55, 0.95)',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255, 255, 255, 0.1)'
-              }}
-            >
-              <p 
-                className="font-bold text-sm mb-2"
-                style={{ color: 'white' }}
-              >
-                Risk Zones
-              </p>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full"
-                    style={{ background: '#EF4444' }}
-                  />
-                  <span style={{ color: '#A0AEC0' }}>Critical</span>
-                </div>
-                {/* Critical - Hurricanes */}
-                <span className="font-bold" style={{ color: 'white' }}>{criticalCount}</span>
-
-                {/* High Risk - Wildfires */}  
-                <span className="font-bold" style={{ color: 'white' }}>{highRiskCount}</span>
-
-                {/* Moderate - Earthquakes */}
-                <span className="font-bold" style={{ color: 'white' }}>{moderateCount}</span>
-
-                {/* Low Risk - Severe Weather */}
-                <span className="font-bold" style={{ color: 'white' }}>{lowRiskCount}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full"
-                    style={{ background: '#F97316' }}
-                  />
-                  <span style={{ color: '#A0AEC0' }}>High Risk</span>
-                </div>
-                <span className="font-bold" style={{ color: 'white' }}>67</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full"
-                    style={{ background: '#EAB308' }}
-                  />
-                  <span style={{ color: '#A0AEC0' }}>Moderate</span>
-                </div>
-                <span className="font-bold" style={{ color: 'white' }}>89</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full"
-                    style={{ background: '#22C55E' }}
-                  />
-                  <span style={{ color: '#A0AEC0' }}>Low Risk</span>
-                </div>
-                <span className="font-bold" style={{ color: 'white' }}>156</span>
-              </div>
-            </div>
-
-            {/* Sample Hurricane Path */}
-            <div className="absolute inset-0 pointer-events-none">
-              <svg className="w-full h-full">
-                <path
-                  d="M 100 400 Q 200 300, 300 250 Q 400 200, 500 150"
-                  stroke="#EF4444"
-                  strokeWidth="4"
-                  fill="none"
-                  strokeDasharray="10,5"
-                />
-                <circle cx="500" cy="150" r="8" fill="#EF4444" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Financial Impact Card */}
-      <div 
-        className="relative"
-        style={{ 
-          borderRadius: '20px',
-          overflow: 'hidden'
-        }}
-      >
-        {/* Background Layer 1 - Backdrop blur */}
-        <div 
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
-            borderRadius: '20px',
-            backdropFilter: 'blur(60px)',
-            zIndex: 1
-          }}
-        />
-        
-        {/* Background Layer 2 - Gradient overlay */}
-        <div 
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
-            borderRadius: '20px',
-            zIndex: 2
-          }}
-        />
-        
-        {/* Content */}
-        <div 
-          className="relative z-10 p-6"
-          style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
-        >
-          <h3 
-            className="text-lg font-bold mb-4"
-            style={{ color: 'white' }}
-          >
-            Financial Impact Summary
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div 
-              className="p-4 rounded-lg"
-              style={{ 
-                background: 'rgba(26, 31, 55, 0.4)',
-                border: '1px solid rgba(255, 255, 255, 0.1)'
-              }}
-            >
-              <p 
-                className="text-sm mb-1"
-                style={{ color: '#A0AEC0' }}
-              >
-                Total Insured Value
-              </p>
-              <p 
-                className="text-3xl font-bold"
-                style={{ color: '#0075FF' }}
-              >
-                $47.2M
-              </p>
-            </div>
-            <div 
-              className="p-4 rounded-lg"
-              style={{ 
-                background: 'rgba(26, 31, 55, 0.4)',
-                border: '1px solid rgba(255, 255, 255, 0.1)'
-              }}
-            >
-              <p 
-                className="text-sm mb-1"
-                style={{ color: '#A0AEC0' }}
-              >
-                Estimated Total Damage
-              </p>
-              <p 
-                className="text-3xl font-bold"
-                style={{ color: '#EF4444' }}
-              >
-                $12.8M
-              </p>
-            </div>
-            <div 
-              className="p-4 rounded-lg"
-              style={{ 
-                background: 'rgba(26, 31, 55, 0.4)',
-                border: '1px solid rgba(255, 255, 255, 0.1)'
-              }}
-            >
-              <p 
-                className="text-sm mb-1"
-                style={{ color: '#A0AEC0' }}
-              >
-                Auto-Approved Claims
-              </p>
-              <p 
-                className="text-3xl font-bold"
-                style={{ color: '#22C55E' }}
-              >
-                $4.2M
-              </p>
-              <p 
-                className="text-xs mt-1"
-                style={{ color: '#A0AEC0' }}
-              >
-                89 properties
-              </p>
-            </div>
-            <div 
-              className="p-4 rounded-lg"
-              style={{ 
-                background: 'rgba(26, 31, 55, 0.4)',
-                border: '1px solid rgba(255, 255, 255, 0.1)'
-              }}
-            >
-              <p 
-                className="text-sm mb-1"
-                style={{ color: '#A0AEC0' }}
-              >
-                Pending Review
-              </p>
-              <p 
-                className="text-3xl font-bold"
-                style={{ color: '#F97316' }}
-              >
-                $8.6M
-              </p>
-              <p 
-                className="text-xs mt-1"
-                style={{ color: '#A0AEC0' }}
-              >
-                112 properties
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Worst-Case Scenario Card */}
-      <div 
-        className="relative"
-        style={{ 
-          borderRadius: '20px',
-          overflow: 'hidden',
-          border: '1px solid rgba(245, 158, 11, 0.3)'
-        }}
-      >
-        {/* Background Layer 1 - Backdrop blur */}
-        <div 
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
-            borderRadius: '20px',
-            backdropFilter: 'blur(60px)',
-            zIndex: 1
-          }}
-        />
-        
-        {/* Background Layer 2 - Gradient overlay with orange tint */}
-        <div 
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            background: 'linear-gradient(85deg, rgba(245, 158, 11, 0.1) 0%, #1A1F37 100%, #1A1F37 100%)',
-            borderRadius: '20px',
-            zIndex: 2
-          }}
-        />
-        
-        {/* Content */}
-        <div 
-          className="relative z-10 p-6"
-          style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
-        >
-          <h3 
-            className="text-lg font-bold mb-4 flex items-center gap-2"
-            style={{ color: 'white' }}
-          >
-            🎯 Worst-Case Scenario Simulation
-          </h3>
-          <div className="space-y-3">
-            <p 
-              className="font-medium"
-              style={{ color: '#A0AEC0' }}
-            >
-              If storm shifts 20 miles east:
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p 
-                  className="text-sm mb-1"
-                  style={{ color: '#A0AEC0' }}
-                >
-                  Additional Exposure
-                </p>
-                <p 
-                  className="text-2xl font-bold"
-                  style={{ color: '#F97316' }}
-                >
-                  $23.1M
-                </p>
-              </div>
-              <div>
-                <p 
-                  className="text-sm mb-1"
-                  style={{ color: '#A0AEC0' }}
-                >
-                  Additional Properties at Risk
-                </p>
-                <p 
-                  className="text-2xl font-bold"
-                  style={{ color: '#F97316' }}
-                >
-                  156
-                </p>
-              </div>
-            </div>
-            <Button 
-              className="w-full md:w-auto mt-2"
-              style={{
-                background: '#0075FF',
-                color: 'white',
-                border: 'none'
-              }}
-            >
-              Run Simulation
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex flex-wrap gap-3">
         <Button
+          onClick={handleRefresh}
           style={{
             background: '#0075FF',
             color: 'white',
-            border: 'none'
-          }}
-        >
-          <FileText className="h-4 w-4 mr-2" />
-          Generate Impact Report
-        </Button>
-        <Button 
-          variant="outline"
-          style={{
-            background: 'rgba(26, 31, 55, 0.4)',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
-            color: 'white'
-          }}
-        >
-          <Bell className="h-4 w-4 mr-2" />
-          Alert All Field Agents
-        </Button>
-        <Button 
-          variant="outline"
-          style={{
-            background: 'rgba(26, 31, 55, 0.4)',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
-            color: 'white'
-          }}
-        >
-          <Mail className="h-4 w-4 mr-2" />
-          Email Stakeholders
-        </Button>
-        <Button 
-          variant="outline"
-          onClick={handleRefresh}
-          style={{
-            background: 'rgba(26, 31, 55, 0.4)',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
-            color: 'white'
+            border: 'none',
+            borderRadius: '12px',
+            fontFamily: 'Plus Jakarta Display, sans-serif'
           }}
         >
           <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh Data
+          Refresh
         </Button>
       </div>
+
+      {/* Active Disasters Grid */}
+      <div>
+        <div className="mb-4" style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}>
+          <h2 className="text-xl font-bold" style={{ color: 'white', fontFamily: 'Plus Jakarta Display, sans-serif' }}>
+            Active Disasters
+          </h2>
+        </div>
+        
+        {isLoading ? (
+          <div 
+            className="relative"
+            style={{
+              borderRadius: '20px',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Background Layer 1 - Backdrop blur */}
+            <div 
+              style={{
+                width: '100%',
+                height: '100%',
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+                borderRadius: '20px',
+                backdropFilter: 'blur(60px)',
+                zIndex: 1
+              }}
+            />
+            
+            {/* Background Layer 2 - Gradient overlay */}
+            <div 
+              style={{
+                width: '100%',
+                height: '100%',
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+                borderRadius: '20px',
+                zIndex: 2
+              }}
+            />
+            
+            <div 
+              className="relative z-10 p-12 text-center"
+              style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
+            >
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" style={{ color: '#A0AEC0' }} />
+              <p style={{ color: '#A0AEC0' }}>Loading disaster data...</p>
+            </div>
+          </div>
+        ) : allDisasters.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {allDisasters.map((disaster: any, idx: number) => {
+              const IconComponent = getDisasterIcon(disaster);
+              const lastUpdated = formatDate(disaster.lastUpdated || disaster.timestamp || disaster.time);
+              
+              return (
+                <div
+                  key={disaster.id || idx}
+                  className="relative"
+                  style={{
+                    borderRadius: '20px',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {/* Background Layer 1 - Backdrop blur */}
+                  <div 
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+                      borderRadius: '20px',
+                      backdropFilter: 'blur(60px)',
+                      zIndex: 1
+                    }}
+                  />
+                  
+                  {/* Background Layer 2 - Gradient overlay */}
+                  <div 
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+                      borderRadius: '20px',
+                      zIndex: 2
+                    }}
+                  />
+                  
+                  {/* Content */}
+                  <div 
+                    className="relative z-10 p-6"
+                    style={{ 
+                      fontFamily: 'Plus Jakarta Display, sans-serif',
+                    }}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div 
+                        style={{
+                          width: '45px',
+                          height: '45px',
+                          background: '#0075FF',
+                          boxShadow: '0px 3.5px 5.5px rgba(0, 0, 0, 0.02)',
+                          borderRadius: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}
+                      >
+                        <IconComponent className="h-5 w-5 text-white" />
+                      </div>
+                      <div className="flex flex-col gap-1 items-end flex-shrink-0 ml-2">
+                        {disaster.statusTags?.map((tag: string, tagIdx: number) => {
+                          const tagColor = getStatusTagColor(tag);
+                          return (
+                            <span
+                              key={tagIdx}
+                              className="px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
+                              style={{
+                                background: tagColor.bg,
+                                border: `1px solid ${tagColor.border}`,
+                                color: tagColor.color
+                              }}
+                            >
+                              {tag}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    
+                    <h3 
+                      className="font-bold text-lg mb-2 break-words" 
+                      style={{ 
+                        color: 'white', 
+                        fontFamily: 'Plus Jakarta Display, sans-serif',
+                        lineHeight: '1.4'
+                      }}
+                    >
+                      {disaster.name}
+                    </h3>
+                    <p 
+                      className="text-sm mb-2 break-words" 
+                      style={{ 
+                        color: '#A0AEC0', 
+                        fontFamily: 'Plus Jakarta Display, sans-serif' 
+                      }}
+                    >
+                      {disaster.location}
+                    </p>
+                    <p 
+                      className="text-xs mb-4" 
+                      style={{ 
+                        color: '#718096', 
+                        fontFamily: 'Plus Jakarta Display, sans-serif' 
+                      }}
+                    >
+                      Updated {lastUpdated}
+                    </p>
+                    
+                    <Button
+                      onClick={() => handleAnalyzeImpact(disaster)}
+                      disabled={analyzeImpact.isPending}
+                      className="w-full"
+                      style={{
+                        background: '#0075FF',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        fontFamily: 'Plus Jakarta Display, sans-serif'
+                      }}
+                    >
+                      {analyzeImpact.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Zap className="h-4 w-4 mr-2" />
+                      )}
+                      Analyze Impact &gt;
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div 
+            className="relative"
+            style={{
+              borderRadius: '20px',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Background Layer 1 - Backdrop blur */}
+            <div 
+              style={{
+                width: '100%',
+                height: '100%',
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
+                borderRadius: '20px',
+                backdropFilter: 'blur(60px)',
+                zIndex: 1
+              }}
+            />
+            
+            {/* Background Layer 2 - Gradient overlay */}
+            <div 
+              style={{
+                width: '100%',
+                height: '100%',
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
+                borderRadius: '20px',
+                zIndex: 2
+              }}
+            />
+            
+            <div 
+              className="relative z-10 p-12 text-center"
+              style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
+            >
+              <AlertTriangle className="h-12 w-12 mx-auto mb-4" style={{ color: '#94A3B8' }} />
+              <p className="text-lg font-medium mb-2" style={{ color: 'white', fontFamily: 'Plus Jakarta Display, sans-serif' }}>
+                No Active Disasters
+              </p>
+              <p className="text-sm" style={{ color: '#A0AEC0', fontFamily: 'Plus Jakarta Display, sans-serif' }}>
+                There are currently no active disasters to display. The system will automatically update when new disasters are detected.
+              </p>
+              <Button
+                onClick={handleRefresh}
+                className="mt-4"
+                style={{
+                  background: '#0075FF',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontFamily: 'Plus Jakarta Display, sans-serif'
+                }}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh Data
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Disaster Impact Popup */}
+      <DisasterImpactPopup
+        isOpen={isPopupOpen}
+        onClose={() => setIsPopupOpen(false)}
+        analysisData={analysisData}
+        selectedDisaster={selectedDisaster}
+        onRefresh={handleRefresh}
+      />
     </div>
   );
 }
