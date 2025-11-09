@@ -4,6 +4,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Area, AreaChart } from "recharts";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import bradenImage from "@/assets/images/braden.jpg";
+import { useActiveDisasters, useHurricanes, useWildfires, useActiveEarthquakes } from "@/hooks/useDisasters";
+import { usePropertyPortfolio, useHighValueProperties } from "@/hooks/useProperties";
 
 // Summary Cards Data
 const statsCards = [
@@ -96,6 +98,25 @@ const chartConfig = {
 };
 
 export default function Dashboard() {
+  // Fetch real disaster data
+  const { data: disasters, isLoading: disastersLoading } = useActiveDisasters();
+  const { data: hurricanes, isLoading: hurricanesLoading } = useHurricanes();
+  const { data: wildfires, isLoading: wildfiresLoading } = useWildfires();
+  const { data: earthquakes, isLoading: earthquakesLoading } = useActiveEarthquakes();
+
+  // Fetch real property data
+  const { data: properties, isLoading: propertiesLoading } = usePropertyPortfolio({ count: 100 });
+  const { data: highValueProps, isLoading: highValueLoading } = useHighValueProperties({ minValue: 500000 });
+
+  // Log the data to console so you can see it working
+  console.log("Dashboard Data:", {
+    disasters: disasters?.data || [],
+    hurricanes: hurricanes?.data || [],
+    wildfires: wildfires?.data || [],
+    earthquakes: earthquakes?.data || [],
+    properties: properties?.data || [],
+    highValueProps: highValueProps?.data || []
+  });
   return (
     <div className="space-y-6" style={{ background: 'transparent', minHeight: '100vh' }}>
       {/* Summary Cards */}

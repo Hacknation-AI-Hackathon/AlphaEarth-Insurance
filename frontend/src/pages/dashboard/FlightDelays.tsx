@@ -9,8 +9,73 @@ import { FlightDelayResponse } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { airports, getAirportByCode, type Airport } from "@/data/airports";
+import { 
+  useAirportDelays, 
+  useFlightPolicies, 
+  useCreateFlightPolicy,
+  usePendingFlightPayouts,
+  useApproveFlightPayout,
+  useFlightStatistics
+} from "@/hooks/useFlight";
 
 export default function FlightDelays() {
+  // Fetch real flight data from backend
+  const { data: delaysData, isLoading: delaysLoading, refetch: refetchDelays } = useAirportDelays();
+  const { data: policiesData, isLoading: policiesLoading } = useFlightPolicies();
+  const { data: payoutsData, isLoading: payoutsLoading } = usePendingFlightPayouts();
+  const { data: statsData, isLoading: statsLoading } = useFlightStatistics();
+  const createPolicy = useCreateFlightPolicy();
+  const approvePayout = useApproveFlightPayout();
+  const { toast } = useToast();
+
+  // Log data to console
+  console.log("Flight Delays Data:", {
+    delays: delaysData?.data || [],
+    policies: policiesData?.policies || [],
+    payouts: payoutsData?.payouts || [],
+    stats: statsData?.statistics || {}
+  });
+
+  // Handle create policy (example - you can customize the form)
+  const handleCreatePolicy = async (policyData: any) => {
+    try {
+      await createPolicy.mutateAsync(policyData);
+      toast({
+        title: "Policy Created",
+        description: "Flight insurance policy created successfully!",
+      });
+    } catch (error) {
+      toast({
+        title: "Creation Failed",
+        description: error instanceof Error ? error.message : "Failed to create policy",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle approve payout
+  const handleApprovePayout = async (payoutId: string) => {
+    try {
+      await approvePayout.mutateAsync({
+        payoutId,
+        adminEmail: "admin@alphaearth.com",
+        adminPassword: "admin123"
+      });
+      toast({
+        title: "Payout Approved",
+        description: "Flight delay payout approved successfully!",
+      });
+    } catch (error) {
+      toast({
+        title: "Approval Failed",
+        description: error instanceof Error ? error.message : "Failed to approve payout",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Get real airport delays (mock data fallback)
+  const airportDelays = delaysData?.data?.airports || [];
   const [formData, setFormData] = useState({
     originCode: "JFK",
     destCode: "LAX",
@@ -21,7 +86,6 @@ export default function FlightDelays() {
   const [delayData, setDelayData] = useState<FlightDelayResponse | null>(null);
   const [analyzedFlights, setAnalyzedFlights] = useState<Array<FlightDelayResponse & { route: string; departureTime: string }>>([]);
   const { mutate: analyzeDelay, isPending } = useFlightDelayAnalysis();
-  const { toast } = useToast();
   const { addNotification } = useNotifications();
 
   const originAirport = getAirportByCode(formData.originCode);

@@ -1,7 +1,44 @@
 import { Button } from "@/components/ui/button";
 import { RefreshCw, FileText, Bell, Mail } from "lucide-react";
+import { useActiveDisasters, useHurricanes, useWildfires, useActiveEarthquakes, useActiveSevereWeather } from "@/hooks/useDisasters";
+import { usePropertiesInRegion } from "@/hooks/useProperties";
+import { useState } from "react";
 
 export default function ImpactMap() {
+  // Fetch real disaster data
+  const { data: disastersData, isLoading: disastersLoading, refetch: refetchDisasters } = useActiveDisasters();
+  const { data: hurricanesData, isLoading: hurricanesLoading } = useHurricanes();
+  const { data: wildfiresData, isLoading: wildfiresLoading } = useWildfires();
+  const { data: earthquakesData, isLoading: earthquakesLoading } = useActiveEarthquakes();
+  const { data: severeWeatherData, isLoading: severeWeatherLoading } = useActiveSevereWeather();
+
+  // Default center on USA or first disaster location
+  const [mapCenter, setMapCenter] = useState<[number, number]>([37.7749, -95.0]);
+  
+  // Fetch properties near disasters
+  const { data: propertiesData } = usePropertiesInRegion(mapCenter[0], mapCenter[1], 100);
+
+  // Log all disaster data to console
+  console.log("Impact Map Data:", {
+    allDisasters: disastersData?.data || [],
+    hurricanes: hurricanesData?.data || [],
+    wildfires: wildfiresData?.data || [],
+    earthquakes: earthquakesData?.data || [],
+    severeWeather: severeWeatherData?.data || [],
+    properties: propertiesData?.data || []
+  });
+
+  // Calculate real counts from backend data
+  const criticalCount = hurricanesData?.count || 0;
+  const highRiskCount = wildfiresData?.count || 0;
+  const moderateCount = earthquakesData?.count || 0;
+  const lowRiskCount = severeWeatherData?.count || 0;
+  const totalAffectedProperties = propertiesData?.count || 0;
+
+  // Handle refresh
+  const handleRefresh = () => {
+    refetchDisasters();
+  };
   return (
     <div className="space-y-6" style={{ background: 'transparent', minHeight: '100vh' }}>
       {/* Header */}
@@ -200,7 +237,17 @@ export default function ImpactMap() {
                   />
                   <span style={{ color: '#A0AEC0' }}>Critical</span>
                 </div>
-                <span className="font-bold" style={{ color: 'white' }}>45</span>
+                {/* Critical - Hurricanes */}
+                <span className="font-bold" style={{ color: 'white' }}>{criticalCount}</span>
+
+                {/* High Risk - Wildfires */}  
+                <span className="font-bold" style={{ color: 'white' }}>{highRiskCount}</span>
+
+                {/* Moderate - Earthquakes */}
+                <span className="font-bold" style={{ color: 'white' }}>{moderateCount}</span>
+
+                {/* Low Risk - Severe Weather */}
+                <span className="font-bold" style={{ color: 'white' }}>{lowRiskCount}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
@@ -532,6 +579,7 @@ export default function ImpactMap() {
         </Button>
         <Button 
           variant="outline"
+          onClick={handleRefresh}
           style={{
             background: 'rgba(26, 31, 55, 0.4)',
             borderColor: 'rgba(255, 255, 255, 0.1)',
