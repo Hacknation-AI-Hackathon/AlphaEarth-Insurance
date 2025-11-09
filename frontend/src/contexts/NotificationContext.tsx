@@ -14,6 +14,7 @@ interface ProcessingState {
   startTime: number | null;
   error: string | null;
   showPopup: boolean;
+  dismissed: boolean; // Track if user manually dismissed the popup
 }
 
 interface NotificationContextType {
@@ -29,6 +30,7 @@ interface NotificationContextType {
   setProcessingState: (state: Partial<ProcessingState>) => void;
   startProcessing: () => void;
   stopProcessing: (error?: string | null) => void;
+  dismissPopup: () => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -40,6 +42,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     startTime: null,
     error: null,
     showPopup: false,
+    dismissed: false,
   });
 
   const addNotification = (notification: Omit<Notification, "id" | "timestamp" | "read">) => {
@@ -81,6 +84,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       startTime: Date.now(),
       error: null,
       showPopup: true,
+      dismissed: false, // Reset dismissed flag when starting new processing
     });
   };
 
@@ -89,7 +93,16 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       ...prev,
       isProcessing: false,
       error: error || null,
-      // Keep showPopup true so user can see the result/error
+      // Only show popup if it wasn't dismissed by user
+      showPopup: !prev.dismissed,
+    }));
+  };
+  
+  const dismissPopup = () => {
+    setProcessingStateInternal((prev) => ({
+      ...prev,
+      showPopup: false,
+      dismissed: true, // Mark as dismissed so it won't reopen
     }));
   };
 
@@ -109,6 +122,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
         setProcessingState,
         startProcessing,
         stopProcessing,
+        dismissPopup,
       }}
     >
       {children}

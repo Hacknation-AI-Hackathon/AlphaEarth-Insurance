@@ -10,9 +10,9 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     proxy: {
       "/api": {
-        target: "http://localhost:8000",
+        target: "http://localhost:5000",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
+        // Don't rewrite path - backend routes are mounted at /api/*
         timeout: 3600000, // 60 minutes timeout for long-running requests (in milliseconds)
         proxyTimeout: 3600000, // 60 minutes proxy timeout
       },

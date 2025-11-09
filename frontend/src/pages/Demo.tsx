@@ -2,40 +2,19 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, AlertTriangle, Droplets, Flame, Wind, Check, ArrowRight } from "lucide-react";
+import { Search, AlertTriangle, Droplets, Flame, Wind, Check, ArrowRight, Loader2 } from "lucide-react";
+import { apiClient } from "@/lib/api";
 
-const mockLocations = [
-  { 
-    name: "San Francisco, CA", 
-    lat: 37.7749, 
-    lon: -122.4194, 
-    flood: 15, 
-    wildfire: 45, 
-    storm: 25,
-    description: "Coastal city with moderate climate risks",
-    population: "873,965"
-  },
-  { 
-    name: "Miami, FL", 
-    lat: 25.7617, 
-    lon: -80.1918, 
-    flood: 75, 
-    wildfire: 10, 
-    storm: 65,
-    description: "High flood and storm risk coastal area",
-    population: "442,241"
-  },
-  { 
-    name: "Houston, TX", 
-    lat: 29.7604, 
-    lon: -95.3698, 
-    flood: 60, 
-    wildfire: 20, 
-    storm: 55,
-    description: "Urban area with significant flood risk",
-    population: "2,304,580"
-  },
-];
+interface Location {
+  name: string;
+  lat: number;
+  lon: number;
+  flood: number;
+  wildfire: number;
+  storm: number;
+  description: string;
+  population: string;
+}
 
 // Custom Map Component for Large Display
 const LargeMapView = ({ lat, lon, name, riskScore }: { lat: number; lon: number; name: string; riskScore: number }) => {
@@ -100,8 +79,113 @@ const LargeMapView = ({ lat, lon, name, riskScore }: { lat: number; lon: number;
 
 const Demo = () => {
   const navigate = useNavigate();
-  const [selectedLocation, setSelectedLocation] = useState(mockLocations[0]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load demo locations on mount
+  useEffect(() => {
+    const loadLocations = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const response = await apiClient.getDemoLocations();
+        
+        if (response.success && response.data) {
+          // Fetch risk assessment for each location
+          const locationsWithRisks = await Promise.all(
+            response.data.map(async (loc: any) => {
+              try {
+                const assessResponse = await apiClient.assessLocation({
+                  lat: loc.lat,
+                  lon: loc.lon
+                });
+                
+                if (assessResponse.success && assessResponse.data) {
+                  return {
+                    name: loc.name,
+                    lat: loc.lat,
+                    lon: loc.lon,
+                    flood: assessResponse.data.risks.flood,
+                    wildfire: assessResponse.data.risks.wildfire,
+                    storm: assessResponse.data.risks.storm,
+                    description: loc.description || assessResponse.data.location.description,
+                    population: loc.population || assessResponse.data.location.population
+                  };
+                }
+                return null;
+              } catch (err) {
+                console.error(`Error assessing risk for ${loc.name}:`, err);
+                // Return location with default risks
+                return {
+                  name: loc.name,
+                  lat: loc.lat,
+                  lon: loc.lon,
+                  flood: 20,
+                  wildfire: 20,
+                  storm: 20,
+                  description: loc.description,
+                  population: loc.population
+                };
+              }
+            })
+          );
+          
+          const validLocations = locationsWithRisks.filter((loc): loc is Location => loc !== null);
+          setLocations(validLocations);
+          
+          if (validLocations.length > 0) {
+            setSelectedLocation(validLocations[0]);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading locations:', err);
+        setError('Failed to load locations. Please try again later.');
+        // Fallback to mock data
+        const mockLocations: Location[] = [
+          { 
+            name: "San Francisco, CA", 
+            lat: 37.7749, 
+            lon: -122.4194, 
+            flood: 15, 
+            wildfire: 45, 
+            storm: 25,
+            description: "Coastal city with moderate climate risks",
+            population: "873,965"
+          },
+          { 
+            name: "Miami, FL", 
+            lat: 25.7617, 
+            lon: -80.1918, 
+            flood: 75, 
+            wildfire: 10, 
+            storm: 65,
+            description: "High flood and storm risk coastal area",
+            population: "442,241"
+          },
+          { 
+            name: "Houston, TX", 
+            lat: 29.7604, 
+            lon: -95.3698, 
+            flood: 60, 
+            wildfire: 20, 
+            storm: 55,
+            description: "Urban area with significant flood risk",
+            population: "2,304,580"
+          },
+        ];
+        setLocations(mockLocations);
+        setSelectedLocation(mockLocations[0]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadLocations();
+  }, []);
 
   // Prevent body scrolling and set font
   useEffect(() => {
@@ -120,6 +204,88 @@ const Demo = () => {
     };
   }, []);
 
+  // Handle location search
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+
+    try {
+      setIsSearching(true);
+      setError(null);
+      
+      const response = await apiClient.assessLocation({
+        location: searchQuery.trim()
+      });
+
+      if (response.success && response.data) {
+        const newLocation: Location = {
+          name: response.data.location.name,
+          lat: response.data.location.lat,
+          lon: response.data.location.lon,
+          flood: response.data.risks.flood,
+          wildfire: response.data.risks.wildfire,
+          storm: response.data.risks.storm,
+          description: response.data.location.description,
+          population: response.data.location.population
+        };
+
+        // Check if location already exists
+        const existingIndex = locations.findIndex(
+          loc => loc.name === newLocation.name
+        );
+
+        if (existingIndex >= 0) {
+          // Update existing location
+          const updatedLocations = [...locations];
+          updatedLocations[existingIndex] = newLocation;
+          setLocations(updatedLocations);
+          setSelectedLocation(newLocation);
+        } else {
+          // Add new location
+          setLocations([...locations, newLocation]);
+          setSelectedLocation(newLocation);
+        }
+
+        setSearchQuery("");
+      }
+    } catch (err: any) {
+      console.error('Error searching location:', err);
+      setError(err.message || 'Failed to search location. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Handle location selection
+  const handleLocationSelect = async (location: Location) => {
+    setSelectedLocation(location);
+    
+    // Optionally refresh risk data
+    try {
+      const response = await apiClient.assessLocation({
+        lat: location.lat,
+        lon: location.lon
+      });
+
+      if (response.success && response.data) {
+        const updatedLocation: Location = {
+          ...location,
+          flood: response.data.risks.flood,
+          wildfire: response.data.risks.wildfire,
+          storm: response.data.risks.storm
+        };
+        
+        setSelectedLocation(updatedLocation);
+        
+        // Update in locations array
+        setLocations(locations.map(loc => 
+          loc.name === location.name ? updatedLocation : loc
+        ));
+      }
+    } catch (err) {
+      console.error('Error refreshing risk data:', err);
+    }
+  };
+
   const getRiskLevel = (score: number): { label: string; color: string; bgColor: string } => {
     if (score < 30) return { label: "Low Risk", color: "#22c55e", bgColor: "rgba(34, 197, 94, 0.1)" };
     if (score < 60) return { label: "Medium Risk", color: "#eab308", bgColor: "rgba(234, 179, 8, 0.1)" };
@@ -127,7 +293,9 @@ const Demo = () => {
     return { label: "Critical Risk", color: "#ef4444", bgColor: "rgba(239, 68, 68, 0.1)" };
   };
 
-  const overallRisk = Math.round((selectedLocation.flood + selectedLocation.wildfire + selectedLocation.storm) / 3);
+  const overallRisk = selectedLocation 
+    ? Math.round((selectedLocation.flood + selectedLocation.wildfire + selectedLocation.storm) / 3)
+    : 0;
   const riskLevel = getRiskLevel(overallRisk);
 
   const handleScrollToTop = () => {
@@ -383,6 +551,12 @@ const Demo = () => {
               placeholder="Search for a location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleSearch();
+                }
+              }}
+              disabled={isSearching}
               style={{
                 border: 'none',
                 outline: 'none',
@@ -392,6 +566,22 @@ const Demo = () => {
                 fontFamily: 'inherit'
               }}
             />
+            {isSearching && (
+              <Loader2 size={20} color="#86868b" className="animate-spin" />
+            )}
+            {!isSearching && (
+              <Button
+                onClick={handleSearch}
+                variant="ghost"
+                size="sm"
+                style={{
+                  padding: '4px 8px',
+                  minWidth: 'auto'
+                }}
+              >
+                Search
+              </Button>
+            )}
           </div>
         </div>
       </section>
@@ -448,31 +638,62 @@ const Demo = () => {
                     Live Data
                   </div>
                 </div>
-                <div style={{
-                  width: '100%',
-                  height: 'clamp(500px, 75vh, 900px)',
-                  borderRadius: '12px',
-                  overflow: 'hidden',
-                  border: '1px solid #e5e5e7',
-                  background: '#f5f5f7'
-                }}>
-                  <LargeMapView 
-                    lat={selectedLocation.lat}
-                    lon={selectedLocation.lon}
-                    name={selectedLocation.name}
-                    riskScore={overallRisk}
-                  />
-                </div>
-                {(selectedLocation.lat || selectedLocation.lon) && (
+                {isLoading ? (
                   <div style={{
+                    width: '100%',
+                    height: 'clamp(500px, 75vh, 900px)',
+                    borderRadius: '12px',
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    marginTop: '12px',
-                    fontSize: '12px',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#f5f5f7',
+                    border: '1px solid #e5e5e7'
+                  }}>
+                    <Loader2 size={32} color="#86868b" className="animate-spin" />
+                  </div>
+                ) : selectedLocation ? (
+                  <>
+                    <div style={{
+                      width: '100%',
+                      height: 'clamp(500px, 75vh, 900px)',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      border: '1px solid #e5e5e7',
+                      background: '#f5f5f7'
+                    }}>
+                      <LargeMapView 
+                        lat={selectedLocation.lat}
+                        lon={selectedLocation.lon}
+                        name={selectedLocation.name}
+                        riskScore={overallRisk}
+                      />
+                    </div>
+                    {(selectedLocation.lat || selectedLocation.lon) && (
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        marginTop: '12px',
+                        fontSize: '12px',
+                        color: '#86868b'
+                      }}>
+                        <span>Lat: {selectedLocation.lat.toFixed(4)}°</span>
+                        <span>Lon: {selectedLocation.lon.toFixed(4)}°</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{
+                    width: '100%',
+                    height: 'clamp(500px, 75vh, 900px)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#f5f5f7',
+                    border: '1px solid #e5e5e7',
                     color: '#86868b'
                   }}>
-                    <span>Lat: {selectedLocation.lat.toFixed(4)}°</span>
-                    <span>Lon: {selectedLocation.lon.toFixed(4)}°</span>
+                    No location selected
                   </div>
                 )}
               </div>
@@ -497,81 +718,113 @@ const Demo = () => {
               }}>
                 Location. Which area do you want to assess?
               </div>
+              {error && (
+                <div style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  background: '#fee2e2',
+                  border: '1px solid #fca5a5',
+                  color: '#dc2626',
+                  fontSize: '14px',
+                  marginTop: '12px'
+                }}>
+                  {error}
+                </div>
+              )}
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
                 marginTop: '20px'
               }}>
-                {mockLocations.map((loc) => {
-                  const locRisk = Math.round((loc.flood + loc.wildfire + loc.storm) / 3);
-                  const isSelected = selectedLocation.name === loc.name;
-                  
-                  return (
-                    <div
-                      key={loc.name}
-                      onClick={() => setSelectedLocation(loc)}
-                      style={{
-                        padding: '20px',
-                        borderRadius: '12px',
-                        border: isSelected ? '2px solid #0071e3' : '1px solid #d2d2d7',
-                        background: isSelected ? 'rgba(0, 113, 227, 0.05)' : 'white',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        position: 'relative'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isSelected) {
-                          e.currentTarget.style.borderColor = '#86868b';
-                          e.currentTarget.style.background = '#f5f5f7';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isSelected) {
-                          e.currentTarget.style.borderColor = '#d2d2d7';
-                          e.currentTarget.style.background = 'white';
-                        }
-                      }}
-                    >
-                      {isSelected && (
+                {isLoading ? (
+                  <div style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    color: '#86868b'
+                  }}>
+                    <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+                    Loading locations...
+                  </div>
+                ) : locations.length > 0 ? (
+                  locations.map((loc) => {
+                    const locRisk = Math.round((loc.flood + loc.wildfire + loc.storm) / 3);
+                    const isSelected = selectedLocation?.name === loc.name;
+                    
+                    return (
+                      <div
+                        key={loc.name}
+                        onClick={() => handleLocationSelect(loc)}
+                        style={{
+                          padding: '20px',
+                          borderRadius: '12px',
+                          border: isSelected ? '2px solid #0071e3' : '1px solid #d2d2d7',
+                          background: isSelected ? 'rgba(0, 113, 227, 0.05)' : 'white',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          position: 'relative'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) {
+                            e.currentTarget.style.borderColor = '#86868b';
+                            e.currentTarget.style.background = '#f5f5f7';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) {
+                            e.currentTarget.style.borderColor = '#d2d2d7';
+                            e.currentTarget.style.background = 'white';
+                          }
+                        }}
+                      >
+                        {isSelected && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '16px',
+                            right: '16px',
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: '#0071e3',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <Check size={16} color="white" />
+                          </div>
+                        )}
                         <div style={{
-                          position: 'absolute',
-                          top: '16px',
-                          right: '16px',
-                          width: '24px',
-                          height: '24px',
-                          borderRadius: '50%',
-                          background: '#0071e3',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
+                          fontSize: '19px',
+                          lineHeight: '1.21053',
+                          fontWeight: 600,
+                          letterSpacing: '-0.009em',
+                          color: '#1d1d1f',
+                          marginBottom: '4px',
+                          paddingRight: '32px'
                         }}>
-                          <Check size={16} color="white" />
+                          {loc.name}
                         </div>
-                      )}
-                      <div style={{
-                        fontSize: '19px',
-                        lineHeight: '1.21053',
-                        fontWeight: 600,
-                        letterSpacing: '-0.009em',
-                        color: '#1d1d1f',
-                        marginBottom: '4px',
-                        paddingRight: '32px'
-                      }}>
-                        {loc.name}
+                        <div style={{
+                          fontSize: '14px',
+                          lineHeight: '1.42859',
+                          fontWeight: 400,
+                          letterSpacing: '-0.016em',
+                          color: '#86868b'
+                        }}>
+                          {loc.description}
+                        </div>
                       </div>
-                      <div style={{
-                        fontSize: '14px',
-                        lineHeight: '1.42859',
-                        fontWeight: 400,
-                        letterSpacing: '-0.016em',
-                        color: '#86868b'
-                      }}>
-                        {loc.description}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                ) : (
+                  <div style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    color: '#86868b'
+                  }}>
+                    No locations available
+                  </div>
+                )}
               </div>
             </div>
 
@@ -588,12 +841,13 @@ const Demo = () => {
                 Risk Assessment
               </div>
 
-              <div style={{
-                background: 'white',
-                borderRadius: '12px',
-                padding: '24px',
-                border: '1px solid #d2d2d7'
-              }}>
+                {selectedLocation ? (
+                <div style={{
+                  background: 'white',
+                  borderRadius: '12px',
+                  padding: '24px',
+                  border: '1px solid #d2d2d7'
+                }}>
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -611,7 +865,7 @@ const Demo = () => {
                       color: '#1d1d1f',
                       marginBottom: '4px'
                     }}>
-                      {selectedLocation.name}
+                      {selectedLocation?.name || 'No location selected'}
                     </div>
                     <div style={{
                       fontSize: '14px',
@@ -619,7 +873,7 @@ const Demo = () => {
                       fontWeight: 400,
                       color: '#86868b'
                     }}>
-                      Population: {selectedLocation.population}
+                      Population: {selectedLocation?.population || 'Unknown'}
                     </div>
                   </div>
                   <div style={{
@@ -704,7 +958,7 @@ const Demo = () => {
                         fontWeight: 600,
                         color: '#1d1d1f'
                       }}>
-                        {selectedLocation.flood}%
+                        {selectedLocation?.flood || 0}%
                       </span>
                     </div>
                     <div style={{
@@ -715,7 +969,7 @@ const Demo = () => {
                     }}>
                       <div style={{
                         height: '100%',
-                        width: `${selectedLocation.flood}%`,
+                        width: `${selectedLocation?.flood || 0}%`,
                         background: '#0071e3',
                         transition: 'width 0.3s ease'
                       }} />
@@ -749,7 +1003,7 @@ const Demo = () => {
                         fontWeight: 600,
                         color: '#1d1d1f'
                       }}>
-                        {selectedLocation.wildfire}%
+                        {selectedLocation?.wildfire || 0}%
                       </span>
                     </div>
                     <div style={{
@@ -760,7 +1014,7 @@ const Demo = () => {
                     }}>
                       <div style={{
                         height: '100%',
-                        width: `${selectedLocation.wildfire}%`,
+                        width: `${selectedLocation?.wildfire || 0}%`,
                         background: '#f97316',
                         transition: 'width 0.3s ease'
                       }} />
@@ -794,7 +1048,7 @@ const Demo = () => {
                         fontWeight: 600,
                         color: '#1d1d1f'
                       }}>
-                        {selectedLocation.storm}%
+                        {selectedLocation?.storm || 0}%
                       </span>
                     </div>
                     <div style={{
@@ -805,7 +1059,7 @@ const Demo = () => {
                     }}>
                       <div style={{
                         height: '100%',
-                        width: `${selectedLocation.storm}%`,
+                        width: `${selectedLocation?.storm || 0}%`,
                         background: '#6366f1',
                         transition: 'width 0.3s ease'
                       }} />
@@ -835,6 +1089,18 @@ const Demo = () => {
                   </p>
                 </div>
               </div>
+                ) : (
+                  <div style={{
+                    background: 'white',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    border: '1px solid #d2d2d7',
+                    textAlign: 'center',
+                    color: '#86868b'
+                  }}>
+                    Select a location to view risk assessment
+                  </div>
+                )}
             </div>
           </div>
         </div>

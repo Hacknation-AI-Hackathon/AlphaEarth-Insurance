@@ -20,7 +20,6 @@ import {
   Rocket,
   HelpCircle,
   Table,
-  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationDropdown } from "@/components/NotificationDropdown";
@@ -62,7 +61,7 @@ export const DashboardLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const pageTitle = getPageTitle(location.pathname);
-  const { processingState, setProcessingState } = useNotifications();
+  const { processingState, dismissPopup } = useNotifications();
   const { isPending } = useClaimProcessing();
 
   return (
@@ -468,82 +467,8 @@ export const DashboardLayout = () => {
               </div>
             </div>
             
-            {/* Right Section - Search Bar and Icons */}
+            {/* Right Section - Icons */}
             <div className="flex items-center gap-4">
-              {/* Search Bar */}
-              <div style={{
-                width: 199,
-                height: 39.50,
-                background: '#0F1535',
-                overflow: 'hidden',
-                borderRadius: 15,
-                outline: '0.50px rgba(226, 232, 240, 0.30) solid',
-                outlineOffset: '-0.50px',
-                justifyContent: 'flex-start',
-                alignItems: 'center',
-                display: 'inline-flex'
-              }}>
-                {/* Icon Container */}
-                <div style={{
-                  width: 37.50,
-                  alignSelf: 'stretch',
-                  overflow: 'hidden',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  display: 'flex'
-                }}>
-                  <div style={{
-                    height: 20,
-                    paddingLeft: 6,
-                    paddingRight: 6,
-                    paddingTop: 4,
-                    paddingBottom: 4,
-                    overflow: 'hidden',
-                    justifyContent: 'flex-start',
-                    alignItems: 'center',
-                    gap: 5,
-                    display: 'flex'
-                  }}>
-                    <Search 
-                      className="h-4 w-4" 
-                      style={{ 
-                        color: '#2D3748',
-                        width: '15px',
-                        height: '15px'
-                      }} 
-                    />
-                  </div>
-                </div>
-                {/* Input Field */}
-                <div style={{
-                  overflow: 'hidden',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'flex-start',
-                  display: 'inline-flex',
-                  flex: 1,
-                  paddingRight: 12
-                }}>
-                  <input
-                    type="text"
-                    placeholder="Type here..."
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      outline: 'none',
-                      color: '#A0AEC0',
-                      fontSize: 12,
-                      fontFamily: 'Plus Jakarta Display, sans-serif',
-                      fontWeight: '400',
-                      lineHeight: 18,
-                      width: '100%',
-                      padding: 0
-                    }}
-                  />
-                </div>
-              </div>
-              
-              {/* Icons */}
               <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
                 <Settings className="h-5 w-5" />
               </Button>
@@ -561,10 +486,8 @@ export const DashboardLayout = () => {
 
       {/* Global Processing Popup - Visible on all dashboard pages */}
       <ProcessingPopup 
-        isVisible={processingState.showPopup} 
-        onClose={() => {
-          setProcessingState({ showPopup: false });
-        }}
+        isVisible={processingState.showPopup && !processingState.dismissed} 
+        onClose={dismissPopup}
         isProcessing={isPending || processingState.isProcessing}
         error={processingState.error}
       />

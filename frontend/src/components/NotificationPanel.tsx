@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 export const NotificationPanel = () => {
   const { notifications, removeNotification, markAsRead } = useNotifications();
   const [visibleNotifications, setVisibleNotifications] = useState<string[]>([]);
+  const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(new Set());
 
   // Show notifications with different auto-dismiss times based on type
   // Filter out "Processing Started" notifications (they're shown in the popup)
@@ -14,6 +15,11 @@ export const NotificationPanel = () => {
       
       const recent = notifications
         .filter((n) => {
+          // Never show dismissed notifications
+          if (dismissedNotifications.has(n.id)) {
+            return false;
+          }
+          
           const age = now - n.timestamp.getTime();
           // Don't show "Processing Started" in the panel - it's in the popup
           const isProcessingStarted = n.title === "Processing Started" && n.type === "info";
@@ -54,7 +60,7 @@ export const NotificationPanel = () => {
     const interval = setInterval(updateVisibleNotifications, 500);
 
     return () => clearInterval(interval);
-  }, [notifications, markAsRead]);
+  }, [notifications, markAsRead, dismissedNotifications]);
 
   const displayNotifications = notifications.filter((n) =>
     visibleNotifications.includes(n.id)
@@ -85,6 +91,8 @@ export const NotificationPanel = () => {
         >
           <button
             onClick={() => {
+              // Mark as dismissed so it never shows again
+              setDismissedNotifications((prev) => new Set(prev).add(notification.id));
               markAsRead(notification.id);
               removeNotification(notification.id);
               setVisibleNotifications((prev) => prev.filter((id) => id !== notification.id));

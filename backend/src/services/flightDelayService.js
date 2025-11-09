@@ -441,6 +441,204 @@ class FlightDelayService {
   toRad(degrees) {
     return degrees * Math.PI / 180;
   }
+
+  /**
+   * Analyze flight delay risk for a specific flight route
+   * @param {Object} flightInfo - Flight information
+   * @param {string} flightInfo.origin_code - Origin airport code
+   * @param {Array<number>} flightInfo.origin_coords - [lat, lon]
+   * @param {string} flightInfo.dest_code - Destination airport code (optional)
+   * @param {Array<number>} flightInfo.dest_coords - [lat, lon] (optional)
+   * @param {string} flightInfo.departure_date - Departure date (YYYY-MM-DD)
+   * @param {string} flightInfo.departure_time - Departure time (HH:MM) (optional)
+   * @param {number} flightInfo.flight_duration_hours - Flight duration in hours (optional)
+   */
+  async analyzeFlightDelay(flightInfo) {
+    try {
+      const { origin_code, origin_coords, dest_code, dest_coords, departure_date, departure_time, flight_duration_hours } = flightInfo;
+
+      // Get origin airport
+      const originAirport = this.airports.find(a => a.code === origin_code.toUpperCase());
+      if (!originAirport) {
+        throw new Error(`Origin airport ${origin_code} not found`);
+      }
+
+      // Get weather conditions at origin
+      const originWeather = await this.getWeatherConditions(origin_coords[0], origin_coords[1]);
+      
+      // Get severe weather alerts at origin
+      const originAlerts = await this.getSevereWeatherAlerts(origin_coords[0], origin_coords[1]);
+
+      // Check for storms at origin
+      const originHasStorm = originAlerts.length > 0 || originWeather.precipitation > 10 || originWeather.windSpeed > 40;
+
+      // Calculate delay factors for origin
+      const originDelayFactors = this.calculateDelayFactors(originWeather, originAlerts, originAirport);
+
+      // Calculate congestion (simplified - based on airport size and time)
+      const congestionAirports = ['ATL', 'ORD', 'LAX', 'DFW', 'JFK', 'DEN', 'MIA', 'SEA', 'SFO', 'LAS'];
+      const originCongestion = congestionAirports.includes(origin_code.toUpperCase()) ? 
+        (Math.random() * 40 + 30) : (Math.random() * 30 + 10);
+
+      // If destination is provided, analyze it too
+      let destWeather = null;
+      let destAlerts = [];
+      let destHasStorm = false;
+      let destDelayFactors = null;
+      let destCongestion = 0;
+      let routeWeather = null;
+      let routeHasStorm = false;
+
+      if (dest_code && dest_coords) {
+        // Get destination airport
+        const destAirport = this.airports.find(a => a.code === dest_code.toUpperCase());
+        if (destAirport) {
+          // Get weather conditions at destination
+          destWeather = await this.getWeatherConditions(dest_coords[0], dest_coords[1]);
+          
+          // Get severe weather alerts
+          destAlerts = await this.getSevereWeatherAlerts(dest_coords[0], dest_coords[1]);
+
+          // Calculate midpoint for route weather
+          const midLat = (origin_coords[0] + dest_coords[0]) / 2;
+          const midLon = (origin_coords[1] + dest_coords[1]) / 2;
+          routeWeather = await this.getWeatherConditions(midLat, midLon);
+          const routeAlerts = await this.getSevereWeatherAlerts(midLat, midLon);
+
+          // Check for storms
+          destHasStorm = destAlerts.length > 0 || destWeather.precipitation > 10 || destWeather.windSpeed > 40;
+          routeHasStorm = routeAlerts.length > 0 || routeWeather.precipitation > 10;
+
+          // Calculate delay factors
+          destDelayFactors = this.calculateDelayFactors(destWeather, destAlerts, destAirport);
+          destCongestion = congestionAirports.includes(dest_code.toUpperCase()) ? 
+            (Math.random() * 40 + 30) : (Math.random() * 30 + 10);
+        }
+      }
+
+      // Calculate total delay probability (0-100%)
+      // If destination provided, use both; otherwise, use only origin
+      let delayProbability;
+      if (dest_code && destDelayFactors) {
+        delayProbability = Math.min(
+          (originDelayFactors.totalDelay / 180) * 50 + 
+          (destDelayFactors.totalDelay / 180) * 30 + 
+          (originCongestion / 100) * 10 + 
+          (destCongestion / 100) * 10,
+          100
+        );
+      } else {
+        // Origin only - focus on origin factors
+        delayProbability = Math.min(
+          (originDelayFactors.totalDelay / 180) * 70 + 
+          (originCongestion / 100) * 30,
+          100
+        );
+      }
+
+      // Calculate expected delay minutes
+      const expectedDelayMinutes = destDelayFactors ? 
+        Math.round((originDelayFactors.totalDelay + destDelayFactors.totalDelay) / 2) :
+        Math.round(originDelayFactors.totalDelay);
+
+      // Determine severity
+      let severity = 'low';
+      if (delayProbability >= 70) severity = 'high';
+      else if (delayProbability >= 40) severity = 'medium';
+
+      // Determine if payout should be triggered (delay probability > 50% or delay > 30 minutes)
+      const shouldPayout = delayProbability > 50 || expectedDelayMinutes > 30;
+      
+      // Calculate payout amount (based on delay probability and severity)
+      let payoutAmount = 0;
+      if (shouldPayout) {
+        if (expectedDelayMinutes > 120) {
+          payoutAmount = 500;
+        } else if (expectedDelayMinutes > 60) {
+          payoutAmount = 300;
+        } else if (expectedDelayMinutes > 30) {
+          payoutAmount = 150;
+        } else {
+          payoutAmount = 75;
+        }
+      }
+
+      // Get delay reason
+      const delayReason = this.getDelayReasonForFlight(
+        originDelayFactors, 
+        destDelayFactors, 
+        originHasStorm, 
+        destHasStorm, 
+        routeHasStorm
+      );
+
+      // Build response
+      const response = {
+        delay_probability: Math.round(delayProbability * 10) / 10,
+        expected_delay_minutes: expectedDelayMinutes,
+        risk_factors: {
+          origin: originDelayFactors
+        },
+        payout_eligible: shouldPayout,
+        payout_amount: payoutAmount,
+        should_payout: shouldPayout,
+        severity,
+        delay_reason: delayReason,
+        weather: {
+          origin: {
+            precipitation_mm: originWeather.precipitation || 0,
+            wind_speed_mph: originWeather.windSpeed || 0,
+            has_storm: originHasStorm
+          }
+        },
+        congestion: {
+          origin: Math.round(originCongestion)
+        }
+      };
+
+      // Add destination data if provided
+      if (dest_code && destWeather && destDelayFactors) {
+        response.risk_factors.destination = destDelayFactors;
+        response.weather.destination = {
+          precipitation_mm: destWeather.precipitation || 0,
+          wind_speed_mph: destWeather.windSpeed || 0,
+          has_storm: destHasStorm
+        };
+        response.weather.route = {
+          route_precipitation_mm: routeWeather?.precipitation || 0,
+          has_storm_along_route: routeHasStorm
+        };
+        response.congestion.destination = Math.round(destCongestion);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('Error analyzing flight delay:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get delay reason for flight analysis
+   */
+  getDelayReasonForFlight(originFactors, destFactors, originStorm, destStorm, routeStorm) {
+    const reasons = [];
+
+    if (originStorm) reasons.push('Storm at origin airport');
+    if (destFactors && destStorm) reasons.push('Storm at destination airport');
+    if (routeStorm) reasons.push('Storm along flight route');
+    if (originFactors.wind > 30) reasons.push('High winds at origin');
+    if (destFactors && destFactors.wind > 30) reasons.push('High winds at destination');
+    if (originFactors.visibility > 30) reasons.push('Low visibility at origin');
+    if (destFactors && destFactors.visibility > 30) reasons.push('Low visibility at destination');
+    if (originFactors.precipitation > 20) reasons.push('Heavy precipitation at origin');
+    if (destFactors && destFactors.precipitation > 20) reasons.push('Heavy precipitation at destination');
+    if (originFactors.congestion > 0) reasons.push('Origin airport congestion');
+    if (destFactors && destFactors.congestion > 0) reasons.push('Destination airport congestion');
+
+    if (reasons.length === 0) return 'Normal weather conditions - low delay risk';
+    return reasons.join('; ');
+  }
 }
 
 export default new FlightDelayService();

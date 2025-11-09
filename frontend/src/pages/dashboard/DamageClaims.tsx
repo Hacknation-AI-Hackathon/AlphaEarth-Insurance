@@ -3,15 +3,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Phone, Mail, AlertTriangle, CheckCircle, Loader2, MapPin, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { useClaimProcessing, useHealthCheck } from "@/hooks/useClaimProcessing";
 import { ClaimProcessingResponse, apiClient } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { geocodeAddress } from "@/lib/utils";
 import { useNotifications } from "@/contexts/NotificationContext";
+import { DatePicker } from "@/components/ui/date-picker";
+import { DamageAssessmentPopup } from "@/components/DamageAssessmentPopup";
 
 export default function DamageClaims() {
   const [claimData, setClaimData] = useState<ClaimProcessingResponse | null>(null);
+  const [showResultsPopup, setShowResultsPopup] = useState(false);
   const [formData, setFormData] = useState({
     address: "",
     radiusKm: "5",
@@ -39,18 +42,29 @@ export default function DamageClaims() {
       if (!processingState.isProcessing) {
         startProcessing();
       }
+    } else {
+      // When mutation completes (success or error), ensure processing is stopped
+      // This is a fallback in case the callbacks don't fire
+      if (processingState.isProcessing) {
+        // Only stop if we haven't already stopped (to avoid overriding error state)
+        if (!processingState.error) {
+          stopProcessing(null);
+        }
+      }
     }
-  }, [isPending, processingState.isProcessing, startProcessing]);
+  }, [isPending, processingState.isProcessing, processingState.error, startProcessing, stopProcessing]);
 
   // Show popup if processing state says so (persists across navigation)
   // This ensures the popup appears even after navigating away and coming back
   const showProcessingPopup = processingState.showPopup;
   
   // When component mounts, if processing state indicates processing, ensure popup is visible
+  // BUT only if it hasn't been dismissed by the user
   useEffect(() => {
     // If processing state says we're processing or there's an error, show the popup
     // This ensures the popup persists when user navigates back to this page
-    if ((processingState.isProcessing || processingState.error) && !processingState.showPopup) {
+    // BUT only if the user hasn't dismissed it
+    if ((processingState.isProcessing || processingState.error) && !processingState.showPopup && !processingState.dismissed) {
       setProcessingState({ showPopup: true });
     }
   }, [processingState, setProcessingState]);
@@ -202,79 +216,56 @@ export default function DamageClaims() {
       },
     };
 
-    // Quick backend health check before starting
-    const checkBackendHealth = async () => {
-      try {
-        // Use the API client's healthCheck method which has proper error handling
-        await apiClient.healthCheck();
-        return true;
-      } catch (error) {
-        // Health check failed - backend is down or unreachable
-        console.error("Backend health check failed:", error);
-        return false;
-      }
-    };
+    // Start processing immediately - don't block on health check
+    // The actual API call will provide proper error handling
+    startProcessing();
 
-    // Check backend health first
-    checkBackendHealth().then((isHealthy) => {
-      if (!isHealthy) {
+    // Add notification (will show at top via NotificationPanel)
+    addNotification({
+      title: "Processing Started",
+      description: "Your claim is being processed. This may take up to 30 minutes.",
+      type: "info",
+    });
+
+    // Process the claim - the API client will handle errors properly
+    processClaim(request, {
+      onSuccess: (data) => {
+        console.log("Claim processing successful:", data);
+        setClaimData(data);
+        // Stop processing immediately when backend responds
+        stopProcessing(null);
+        
+        // Open the results popup automatically
+        setShowResultsPopup(true);
+        
+        // Add success notification
         addNotification({
-          title: "Backend Unavailable",
-          description: "Unable to connect to the backend server. Please ensure the server is running on port 5000.",
+          title: "Processing Complete",
+          description: "Claim processed successfully! Results are now available.",
+          type: "success",
+        });
+      },
+      onError: (error) => {
+        // Processing was running but failed - stop immediately when backend sends error
+        console.error("Claim processing failed:", error);
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : "An error occurred while processing your claim. Please try again.";
+        
+        // Stop processing immediately with error when backend responds
+        stopProcessing(errorMessage);
+        
+        // Add error notification with detailed message
+        addNotification({
+          title: "Processing Failed",
+          description: errorMessage.includes("Network error") || errorMessage.includes("Unable to connect")
+            ? "Unable to connect to the backend server. Please ensure the server is running on port 5000."
+            : errorMessage,
           type: "error",
         });
-        return;
-      }
-
-      // Backend is healthy, proceed with processing
-      // Start processing in global state (persists across navigation)
-      startProcessing();
-
-      // Add notification (will show at top via NotificationPanel)
-      addNotification({
-        title: "Processing Started",
-        description: "Your claim is being processed. This may take up to 30 minutes.",
-        type: "info",
-      });
-
-      processClaim(request, {
-        onSuccess: (data) => {
-          setClaimData(data);
-          // Stop processing but keep popup visible to show success
-          stopProcessing(null);
-          
-          // Add success notification
-          addNotification({
-            title: "Processing Complete",
-            description: "Claim processed successfully! Results are now available.",
-            type: "success",
-          });
-
-          // Toast is optional - notification is already shown
-        },
-        onError: (error) => {
-          // Processing was running but failed
-          const errorMessage = error instanceof Error 
-            ? error.message 
-            : "An error occurred while processing your claim. Please try again.";
-          
-          // Stop processing with error (keeps popup visible to show error)
-          stopProcessing(errorMessage);
-          
-          // Add error notification
-          addNotification({
-            title: "Processing Failed",
-            description: errorMessage,
-            type: "error",
-          });
-        },
-      });
+      },
     });
   };
-
-  const confidenceScore = claimData?.validation?.confidence?.confidence_score || 0;
-  const damagePct = claimData?.hazard?.damage_pct || 0;
-  const confidenceLabel = claimData?.validation?.confidence?.label || "Unknown";
 
   return (
     <div className="space-y-6" style={{ background: 'transparent', minHeight: '100vh' }}>
@@ -375,7 +366,7 @@ export default function DamageClaims() {
                     color: 'white'
                   }}
                 />
-                <Button
+                  <Button
                   onClick={handleGeocode}
                   disabled={isGeocoding || !formData.address.trim()}
                   style={{
@@ -388,16 +379,12 @@ export default function DamageClaims() {
                   {isGeocoding ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <>
-                      <Search className="h-4 w-4 mr-2" />
-                      Search
-                    </>
+                    "Search"
                   )}
                 </Button>
               </div>
               {formData.locationName && (
                 <p className="text-xs mt-2" style={{ color: '#22C55E' }}>
-                  <CheckCircle className="h-3 w-3 inline mr-1" />
                   {formData.locationName}
                 </p>
               )}
@@ -475,10 +462,10 @@ export default function DamageClaims() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <Label style={{ color: '#A0AEC0', fontSize: '12px' }}>Start Date</Label>
-              <Input
-                type="date"
+              <DatePicker
                 value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, startDate: value })}
+                placeholder="MM/DD/YYYY"
                 style={{
                   background: 'rgba(26, 31, 55, 0.4)',
                   borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -488,10 +475,10 @@ export default function DamageClaims() {
             </div>
             <div>
               <Label style={{ color: '#A0AEC0', fontSize: '12px' }}>End Date</Label>
-              <Input
-                type="date"
+              <DatePicker
                 value={formData.endDate}
-                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, endDate: value })}
+                placeholder="MM/DD/YYYY"
                 style={{
                   background: 'rgba(26, 31, 55, 0.4)',
                   borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -587,10 +574,7 @@ export default function DamageClaims() {
                 Processing...
               </>
             ) : (
-              <>
-                <MapPin className="h-4 w-4 mr-2" />
-                Process Claim
-              </>
+              "Process Claim"
             )}
           </Button>
           {isPending && (
@@ -598,286 +582,59 @@ export default function DamageClaims() {
               className="text-xs text-center mt-2"
               style={{ color: '#A0AEC0', fontFamily: 'Plus Jakarta Display, sans-serif' }}
             >
-              ⏱️ Processing in the background - feel free to continue browsing
+              Processing in the background - feel free to continue browsing
             </p>
           )}
         </div>
       </div>
 
-      {/* Results Section - Only show if claimData exists */}
+      {/* Results Button - Show if claimData exists */}
       {claimData && (
-        <>
-          {/* AI Analysis Card */}
+        <div 
+          className="relative"
+          style={{ 
+            borderRadius: '20px',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Background Layer 1 - Backdrop blur */}
           <div 
-            className="relative"
-            style={{ 
+            style={{
+              width: '100%',
+              height: '100%',
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
               borderRadius: '20px',
-              overflow: 'hidden'
+              backdropFilter: 'blur(60px)',
+              zIndex: 1
             }}
-          >
-            {/* Background Layer 1 - Backdrop blur */}
-            <div 
-              style={{
-                width: '100%',
-                height: '100%',
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
-                borderRadius: '20px',
-                backdropFilter: 'blur(60px)',
-                zIndex: 1
-              }}
-            />
-            
-            {/* Background Layer 2 - Gradient overlay */}
-            <div 
-              style={{
-                width: '100%',
-                height: '100%',
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
-                borderRadius: '20px',
-                zIndex: 2
-              }}
-            />
-            
-            {/* Content */}
-            <div 
-              className="relative z-10 p-6"
-              style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
-            >
-              <h3 
-                className="text-lg font-bold mb-4"
-                style={{ color: 'white' }}
-              >
-                🤖 AI Damage Assessment
-              </h3>
-              
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span 
-                    className="text-sm font-medium"
-                    style={{ color: '#A0AEC0' }}
-                  >
-                    Confidence Score
-                  </span>
-                  <span 
-                    className="text-sm font-bold"
-                    style={{ color: 'white' }}
-                  >
-                    {Math.round(confidenceScore * 100)}%
-                  </span>
-                </div>
-                <div 
-                  className="w-full h-3 rounded-full overflow-hidden"
-                  style={{ background: 'rgba(255, 255, 255, 0.1)' }}
-                >
-                  <div 
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${confidenceScore * 100}%`, background: '#0075FF' }}
-                  />
-                </div>
-                <p className="text-xs mt-2" style={{ color: '#A0AEC0' }}>
-                  Label: {confidenceLabel}
-                </p>
-              </div>
-
-              {damagePct > 0 && (
-                <div className="mb-4">
-                  <p 
-                    className="font-medium mb-3"
-                    style={{ color: 'white' }}
-                  >
-                    Damage Detected:
-                  </p>
-                  <p 
-                    className="text-sm"
-                    style={{ color: '#A0AEC0' }}
-                  >
-                    Damage Percentage: {damagePct.toFixed(2)}%
-                  </p>
-                </div>
-              )}
-
-              {claimData.summary && (
-                <div className="mb-4">
-                  <p 
-                    className="font-medium mb-3"
-                    style={{ color: 'white' }}
-                  >
-                    Summary:
-                  </p>
-                  <p 
-                    className="text-sm"
-                    style={{ color: '#A0AEC0' }}
-                  >
-                    {claimData.summary}
-                  </p>
-                </div>
-              )}
-
-              {claimData.ranked_hazards && claimData.ranked_hazards.length > 0 && (
-                <div className="mb-4">
-                  <p 
-                    className="font-medium mb-3"
-                    style={{ color: 'white' }}
-                  >
-                    Ranked Hazards:
-                  </p>
-                  <ul className="space-y-2">
-                    {claimData.ranked_hazards.map((hazard, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: '#22C55E' }} />
-                        <span 
-                          className="text-sm"
-                          style={{ color: '#A0AEC0' }}
-                        >
-                          {hazard.hazard}: {hazard.fused_score?.toFixed(2)} (Confidence: {hazard.confidence_label})
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Validation Metrics */}
-          {claimData.validation && (
-            <div 
-              className="relative"
-              style={{ 
-                borderRadius: '20px',
-                overflow: 'hidden'
-              }}
-            >
-              {/* Background Layer 1 - Backdrop blur */}
-              <div 
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
-                  borderRadius: '20px',
-                  backdropFilter: 'blur(60px)',
-                  zIndex: 1
-                }}
-              />
-              
-              {/* Background Layer 2 - Gradient overlay */}
-              <div 
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
-                  borderRadius: '20px',
-                  zIndex: 2
-                }}
-              />
-              
-              {/* Content */}
-              <div 
-                className="relative z-10 p-6"
-                style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
-              >
-                <h3 
-                  className="text-lg font-bold mb-4"
-                  style={{ color: 'white' }}
-                >
-                  📊 Validation Metrics
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-sm mb-1" style={{ color: '#A0AEC0' }}>Cross Sensor</p>
-                    <p className="text-lg font-bold" style={{ color: 'white' }}>
-                      {claimData.validation.cross_sensor.toFixed(2)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm mb-1" style={{ color: '#A0AEC0' }}>Meteorology</p>
-                    <p className="text-lg font-bold" style={{ color: 'white' }}>
-                      {claimData.validation.meteorology.toFixed(2)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm mb-1" style={{ color: '#A0AEC0' }}>Spatial Coherence</p>
-                    <p className="text-lg font-bold" style={{ color: 'white' }}>
-                      {claimData.validation.spatial_coherence.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Claim Status Card */}
+          />
+          
+          {/* Background Layer 2 - Gradient overlay */}
           <div 
-            className="relative"
-            style={{ 
+            style={{
+              width: '100%',
+              height: '100%',
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              background: 'linear-gradient(85deg, rgba(14, 13, 57, 0) 0%, #1A1F37 100%, #1A1F37 100%)',
               borderRadius: '20px',
-              overflow: 'hidden',
-              border: '1px solid rgba(34, 197, 94, 0.3)'
+              zIndex: 2
             }}
+          />
+          
+          {/* Content */}
+          <div 
+            className="relative z-10 p-6"
+            style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
           >
-            {/* Background Layer 1 - Backdrop blur with green tint */}
-            <div 
-              style={{
-                width: '100%',
-                height: '100%',
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                background: 'linear-gradient(175deg, rgba(6, 11, 38, 0.89) 0%, rgba(26, 31, 55, 0.50) 100%)',
-                borderRadius: '20px',
-                backdropFilter: 'blur(60px)',
-                zIndex: 1
-              }}
-            />
-            
-            {/* Background Layer 2 - Gradient overlay with green */}
-            <div 
-              style={{
-                width: '100%',
-                height: '100%',
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                background: 'linear-gradient(85deg, rgba(34, 197, 94, 0.1) 0%, #1A1F37 100%, #1A1F37 100%)',
-                borderRadius: '20px',
-                zIndex: 2
-              }}
-            />
-            
-            {/* Content */}
-            <div 
-              className="relative z-10 p-6 space-y-4"
-              style={{ fontFamily: 'Plus Jakarta Display, sans-serif' }}
-            >
-              <div 
-                className="inline-block px-4 py-2 rounded-lg"
-                style={{ 
-                  background: 'rgba(34, 197, 94, 0.2)',
-                  border: '1px solid rgba(34, 197, 94, 0.3)'
-                }}
-              >
-                <span 
-                  className="text-lg font-bold"
-                  style={{ color: '#22C55E' }}
-                >
-                  🟢 CLAIM PROCESSED
-                </span>
-              </div>
-              <div className="space-y-2">
+            <div className="space-y-4">
+              <div>
                 <p 
-                  className="text-xl font-bold"
+                  className="text-xl font-bold mb-2"
                   style={{ color: 'white' }}
                 >
                   Processing Complete
@@ -886,36 +643,34 @@ export default function DamageClaims() {
                   className="text-sm"
                   style={{ color: '#A0AEC0' }}
                 >
-                  Analysis completed successfully. Review the results above.
+                  Analysis completed successfully. Click below to view detailed results.
                 </p>
               </div>
-              <div className="flex gap-3 pt-2 flex-wrap">
-                <Button
-                  style={{
-                    background: '#0075FF',
-                    color: 'white',
-                    border: 'none'
-                  }}
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  Generate Report
-                </Button>
-                <Button 
-                  variant="outline"
-                  style={{
-                    background: 'rgba(26, 31, 55, 0.4)',
-                    borderColor: 'rgba(255, 255, 255, 0.1)',
-                    color: 'white'
-                  }}
-                >
-                  <Mail className="h-4 w-4 mr-2" />
-                  Export Data
-                </Button>
-              </div>
+              <Button
+                onClick={() => setShowResultsPopup(true)}
+                className="w-full"
+                style={{
+                  background: '#0075FF',
+                  color: 'white',
+                  border: 'none'
+                }}
+              >
+                View Damage Assessment Results
+              </Button>
             </div>
           </div>
-        </>
+        </div>
       )}
+
+      {/* Damage Assessment Popup */}
+      <DamageAssessmentPopup
+        isOpen={showResultsPopup}
+        onClose={() => setShowResultsPopup(false)}
+        claimData={claimData}
+        mapCenter={formData.latitude && formData.longitude 
+          ? [parseFloat(formData.latitude), parseFloat(formData.longitude)] 
+          : undefined}
+      />
     </div>
   );
 }
