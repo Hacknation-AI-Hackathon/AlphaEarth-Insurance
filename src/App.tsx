@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import DisasterMapping from "./pages/DisasterMapping";
+import ParametricInsurance from "./pages/ParametricInsurance";
+import FlightInsurance from "./pages/FlightInsurance";
 
 const queryClient = new QueryClient();
 
@@ -18,6 +20,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/disaster-mapping" element={<DisasterMapping />} />
+          <Route path="/parametric-insurance" element={<ParametricInsurance />} />
+          <Route path="/flight-insurance" element={<FlightInsurance />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

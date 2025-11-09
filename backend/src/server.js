@@ -7,6 +7,8 @@ import analysisRoutes from './routes/analysisRoutes.js';
 import imageryRoutes from './routes/imageryRoutes.js';
 import earthquakeRoutes from './routes/earthquakeRoutes.js';
 import severeWeatherRoutes from './routes/severeWeatherRoutes.js';
+import parametricRoutes from './routes/parametricRoutes.js';
+import flightRoutes from './routes/flightRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,6 +44,8 @@ app.use('/api/analysis', analysisRoutes);
 app.use('/api/imagery', imageryRoutes);
 app.use('/api/earthquakes', earthquakeRoutes);
 app.use('/api/severe-weather', severeWeatherRoutes);
+app.use('/api/parametric', parametricRoutes);
+app.use('/api/flight', flightRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

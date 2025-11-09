@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Globe, Satellite } from "lucide-react";
+import { ArrowRight, Globe, Satellite, Plane } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export const Hero = () => {
@@ -40,10 +40,18 @@ export const Hero = () => {
                 <ArrowRight className="w-5 h-5" />
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 font-semibold gap-2">
-              <Globe className="w-5 h-5" />
-              View Demo
-            </Button>
+            <Link to="/parametric-insurance">
+              <Button size="lg" variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 font-semibold gap-2">
+                <Globe className="w-5 h-5" />
+                Parametric Insurance
+              </Button>
+            </Link>
+            <Link to="/flight-insurance">
+              <Button size="lg" variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 font-semibold gap-2">
+                <Plane className="w-5 h-5" />
+                Flight Delays
+              </Button>
+            </Link>
           </div>
 
           {/* Stats */}
