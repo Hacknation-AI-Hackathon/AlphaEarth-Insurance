@@ -16,9 +16,50 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Normalize CORS origins - remove trailing slashes to avoid mismatches
+const normalizeOrigin = (origin) => {
+  if (!origin) return origin;
+  return origin.trim().replace(/\/+$/, ''); // Remove trailing slashes
+};
+
+// Determine CORS origin(s)
+const getCorsOrigin = () => {
+  if (process.env.CORS_ORIGIN) {
+    // Support comma-separated list of origins
+    const origins = process.env.CORS_ORIGIN.split(',').map(normalizeOrigin);
+    return origins;
+  }
+  // Development origins
+  return ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:3000'];
+};
+
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:8080',
+  origin: (origin, callback) => {
+    const allowedOrigins = getCorsOrigin();
+    const normalizedOrigin = normalizeOrigin(origin);
+    
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!normalizedOrigin) {
+      return callback(null, true);
+    }
+    
+    // Check if the normalized origin is in the allowed list
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+    
+    // Also check if any allowed origin matches when normalized
+    const isAllowed = allowedOrigins.some(allowed => 
+      normalizeOrigin(allowed) === normalizedOrigin
+    );
+    
+    if (isAllowed) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());
